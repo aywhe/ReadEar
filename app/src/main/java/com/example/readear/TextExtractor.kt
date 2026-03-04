@@ -9,12 +9,11 @@ import kotlinx.coroutines.flow.Flow
  */
 interface TextExtractor {
     /**
-     * 异步提取文本内容
+     * 异步提取文本内容（原始文本流）
      * @param uri 文件 URI
-     * @param chunkSize 每次提取的字符数（章节大小）
-     * @return 返回文本块的 Flow
+     * @return 返回原始文本的 Flow（按行或按段）
      */
-    fun extractText(uri: Uri, chunkSize: Int = 5000): Flow<TextChunk>
+    fun extractTextRaw(uri: Uri): Flow<String>
 }
 
 /**

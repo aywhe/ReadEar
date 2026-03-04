@@ -93,19 +93,16 @@ fun ContentScreen(
     // 控制跳转对话框的显示
     var showJumpDialog by remember { mutableStateOf(false) }
     
-    // 页面布局参数 - 每页能显示的字符数（综合考虑字数和行数）
+    // 页面布局参数 - 每页能显示的字符数（由后台根据行数自动计算）
     // 基于固定的字体大小（16sp）和行高（24sp * 1.5）
     val defaultFontSize = 16.sp
     val baseLineHeight = 24.sp
     val scaledLineHeight = baseLineHeight * 1.5f
-    val scaledLineHeightPx = with(density) { scaledLineHeight.toPx() }
     
-    // 屏幕信息（在 MainActivity 中已获取）
-    val screenHeightPx = context.resources.displayMetrics.heightPixels.toFloat()
-    
-    // 计算每页能显示的行数和字符数（先使用默认值，实际值会在渲染时根据 innerPadding 更新）
-    var pageSize by remember { mutableIntStateOf(0) }
-    var isPageSizeInitialized by remember { mutableStateOf(false) }
+    // 计算每页能显示的行数和每行字符数
+    var avgCharsPerLine by remember { mutableIntStateOf(0) }
+    var maxLinesPerPage by remember { mutableIntStateOf(0) }
+    var isParamsInitialized by remember { mutableStateOf(false) }
     
     // 启动文本提取（一次性异步提取所有文本）
     LaunchedEffect(uri, fileType) {
@@ -134,19 +131,25 @@ fun ContentScreen(
         
         try {
             val extractor = TextExtractorFactory.getExtractor(context, fileType)
+            val paginationProcessor = TextPaginationProcessor()
             
             lifecycleScope.launch {
-                extractor.extractText(uri, chunkSize = pageSize).collectLatest { chunk ->
-                    textChunks = textChunks + chunk
-                    totalExtractedChars += chunk.content.length
-                    isLoading = false
-                    
-                    if (textChunks.size == 1) {
-                        lifecycleScope.launch {
-                            pagerState.scrollToPage(0)
+                // 模块 1：提取原始文本流
+                val rawTextFlow = extractor.extractTextRaw(uri)
+                
+                // 模块 2：处理文本流并分页
+                paginationProcessor.paginateText(rawTextFlow, avgCharsPerLine, maxLinesPerPage)
+                    .collectLatest { chunk ->
+                        textChunks = textChunks + chunk
+                        totalExtractedChars += chunk.content.length
+                        isLoading = false
+                        
+                        if (textChunks.size == 1) {
+                            lifecycleScope.launch {
+                                pagerState.scrollToPage(0)
+                            }
                         }
                     }
-                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -188,39 +191,30 @@ fun ContentScreen(
             )
         }
     ) { innerPadding ->
-        // 精确计算可用高度（排除顶部 AppBar 和底部 padding）
+        // 精确计算可用高度和宽度（排除顶部 AppBar、底部和左右 padding）
         val topPadding = innerPadding.calculateTopPadding().value * density.density
         val bottomPadding = innerPadding.calculateBottomPadding().value * density.density
-        val availableHeight = screenHeightPx - topPadding - bottomPadding
+        val horizontalPadding = 16.dp.value * 2 * density.density
         
-        // 如果还没初始化 pageSize，现在计算
-        if (!isPageSizeInitialized) {
-            // 计算左右 padding（各 16dp）
-            val horizontalPadding = 16.dp.value * 2 * density.density
-            val availableWidth = context.resources.displayMetrics.widthPixels.toFloat() - horizontalPadding
-            
-            // 1. 计算平均每行字符数（考虑字间距）
+        val screenHeightPx = context.resources.displayMetrics.heightPixels.toFloat()
+        val screenWidthPx = context.resources.displayMetrics.widthPixels.toFloat()
+        
+        val availableHeight = screenHeightPx - topPadding - bottomPadding
+        val availableWidth = screenWidthPx - horizontalPadding
+        
+        // 如果还没初始化参数，现在计算
+        if (!isParamsInitialized) {
+            // 1. 计算每行平均字符数（左右留安全距离）
             val fontSizePx = with(density) { defaultFontSize.toPx() }
             val charAspectRatio = 1.0f // 汉字宽高比约 1:1
             val avgCharWidth = fontSizePx * charAspectRatio * 0.9f // 考虑字间距，留 10% 余量
-            val avgCharsPerLine = (availableWidth / avgCharWidth).toInt()
+            avgCharsPerLine = (availableWidth / avgCharWidth).toInt()
             
-            // 2. 计算理论最大行数（基于可用高度和行高）
-            val maxLinesPerPage = (availableHeight / scaledLineHeightPx).toInt().coerceIn(10, 35)
+            // 2. 计算每页最大行数（上下留安全距离，已排除标题栏）
+            val scaledLineHeightPx = with(density) { scaledLineHeight.toPx() }
+            maxLinesPerPage = (availableHeight / scaledLineHeightPx).toInt().coerceIn(10, 35)
             
-            // 3. 考虑段落间距和换行空白的影响
-            //   - 每个段落后会有额外的空行（lineHeight）
-            //   - 假设平均每页有 3-5 个段落
-            //   - 预留 15% 的空间给段落间距和换行空白
-            val effectiveLinesRatio = 0.85f // 有效行数比例
-            val effectiveMaxLines = (maxLinesPerPage * effectiveLinesRatio).toInt()
-            
-            // 4. 综合计算每页字符数（同时考虑行数和每行字符数）
-            //   公式：pageSize = 有效行数 × 每行字符数 × 安全余量
-            val safetyMargin = 0.95f // 留 5% 余量，确保不会溢出
-            pageSize = (effectiveMaxLines * avgCharsPerLine * safetyMargin).toInt()
-            
-            isPageSizeInitialized = true
+            isParamsInitialized = true
         }
         
         Box(

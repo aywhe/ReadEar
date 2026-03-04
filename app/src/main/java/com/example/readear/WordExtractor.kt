@@ -15,46 +15,15 @@ import java.io.InputStreamReader
  */
 class WordExtractor(private val context: Context) : TextExtractor {
     
-    override fun extractText(uri: Uri, chunkSize: Int): Flow<TextChunk> = flow {
-        var chapterIndex = 0
-        var currentContent = StringBuilder()
-        
+    override fun extractTextRaw(uri: Uri): Flow<String> = flow {
         try {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8)).use { reader ->
                     var line: String?
-                    var totalChars = 0
                     
                     while (reader.readLine().also { line = it } != null) {
-                        currentContent.append(line).append("\n")
-                        totalChars += line!!.length + 1
-                        
-                        // 当达到指定字符数时，发出一个文本块
-                        if (totalChars >= chunkSize) {
-                            emit(
-                                TextChunk(
-                                    content = currentContent.toString(),
-                                    chapterTitle = "章节 ${chapterIndex + 1}",
-                                    isComplete = false,
-                                    chapterIndex = chapterIndex + 1
-                                )
-                            )
-                            currentContent.clear()
-                            chapterIndex++
-                            totalChars = 0
-                        }
-                    }
-                    
-                    // 发送剩余的内容
-                    if (currentContent.isNotEmpty()) {
-                        emit(
-                            TextChunk(
-                                content = currentContent.toString(),
-                                chapterTitle = if (chapterIndex > 0) "章节 ${chapterIndex + 1}" else "第 1 章",
-                                isComplete = true,
-                                chapterIndex = chapterIndex + 1
-                            )
-                        )
+                        // 直接发出原始文本行
+                        emit(line!!)
                     }
                 }
             }

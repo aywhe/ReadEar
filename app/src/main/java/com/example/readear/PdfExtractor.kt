@@ -13,14 +13,10 @@ import com.tom_roush.pdfbox.pdmodel.PDDocument
  */
 class PdfExtractor(private val context: Context) : TextExtractor {
     
-    override fun extractText(uri: Uri, chunkSize: Int): Flow<TextChunk> = flow {
-        var chapterIndex = 0
-        var currentContent = StringBuilder()
-        
+    override fun extractTextRaw(uri: Uri): Flow<String> = flow {
         try {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 PDDocument.load(inputStream).use { document ->
-                    var totalChars = 0
                     val numberOfPages = document.numberOfPages
                     
                     val pdfTextStripper = com.tom_roush.pdfbox.text.PDFTextStripper()
@@ -29,36 +25,13 @@ class PdfExtractor(private val context: Context) : TextExtractor {
                     for (i in 1..numberOfPages) {
                         pdfTextStripper.startPage = i
                         pdfTextStripper.endPage = i
-                        val text = pdfTextStripper.getText(document) + "\n\n"
-                        currentContent.append(text)
-                        totalChars += text.length
-                        
-                        // 当达到指定字符数时，发出一个文本块
-                        if (totalChars >= chunkSize) {
-                            emit(
-                                TextChunk(
-                                    content = currentContent.toString(),
-                                    chapterTitle = "章节 ${chapterIndex + 1}",
-                                    isComplete = false,
-                                    chapterIndex = chapterIndex + 1
-                                )
-                            )
-                            currentContent.clear()
-                            chapterIndex++
-                            totalChars = 0
+                        val text = pdfTextStripper.getText(document)
+                        // 按段落发出文本
+                        text.lines().forEach { line ->
+                            if (line.isNotEmpty()) {
+                                emit(line)
+                            }
                         }
-                    }
-                    
-                    // 发送剩余的内容
-                    if (currentContent.isNotEmpty()) {
-                        emit(
-                            TextChunk(
-                                content = currentContent.toString(),
-                                chapterTitle = if (chapterIndex > 0) "章节 ${chapterIndex + 1}" else "第 1 章",
-                                isComplete = true,
-                                chapterIndex = chapterIndex + 1
-                            )
-                        )
                     }
                 }
             }
