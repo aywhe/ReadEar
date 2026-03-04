@@ -29,7 +29,7 @@
         <activity
             android:name=".ContentActivity"
             android:exported="false"
-            android:label="文件内容"
+            android:label="@string/content_title"
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.ReadEar" />
     </application>

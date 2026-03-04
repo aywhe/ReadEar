@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.util.DisplayMetrics
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -43,6 +44,13 @@ import org.json.JSONObject
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "file_list")
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        // 屏幕信息（在应用启动时获取）
+        var screenDpi: Float = 0f
+        var screenWidthPx: Int = 0
+        var screenHeightPx: Int = 0
+    }
+    
     private val fileBrowserLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -80,6 +88,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // 获取屏幕信息
+        val metrics = resources.displayMetrics
+        screenDpi = metrics.densityDpi.toFloat()
+        screenWidthPx = metrics.widthPixels
+        screenHeightPx = metrics.heightPixels
         
         fileRepository = FileRepository(applicationContext)
         
