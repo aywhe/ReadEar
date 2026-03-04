@@ -1,6 +1,7 @@
 package com.example.readear
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -46,6 +47,17 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
+            // 立即获取持久 URI 权限
+            try {
+                contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                // 忽略异常，URI 可能没有持久权限标志
+                e.printStackTrace()
+            }
+            
             val fileInfo = getFileInfoFromUri(it)
             Toast.makeText(this, "选择了文件：${fileInfo.fileName}", Toast.LENGTH_SHORT).show()
             
@@ -82,6 +94,9 @@ class MainActivity : ComponentActivity() {
                             onDeleteFile = { file ->
                                 deleteFileFromList(file)
                                 FileRepository(applicationContext).saveFileList(fileList)
+                            },
+                            onFileClick = { file ->
+                                openContentActivity(file)
                             }
                         )
                         DraggableFloatingButton(
@@ -134,6 +149,18 @@ class MainActivity : ComponentActivity() {
         kotlinx.coroutines.GlobalScope.launch {
             try {
                 val restoredList = fileRepository.loadFileList()
+                // 为每个恢复的 URI 重新请求持久权限
+                restoredList.forEach { fileItem ->
+                    try {
+                        val uri = Uri.parse(fileItem.fileUri)
+                        contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (e: Exception) {
+                        // 忽略异常
+                    }
+                }
                 // 切换回主线程更新 UI
                 with(kotlinx.coroutines.Dispatchers.Main) {
                     fileList = restoredList
@@ -185,6 +212,15 @@ class MainActivity : ComponentActivity() {
             else -> FileType.OTHER
         }
     }
+    
+    private fun openContentActivity(file: FileItem) {
+        val intent = Intent(this, ContentActivity::class.java).apply {
+            putExtra(ContentActivity.EXTRA_FILE_URI, file.fileUri)
+            putExtra(ContentActivity.EXTRA_FILE_NAME, file.fileName)
+            putExtra(ContentActivity.EXTRA_FILE_TYPE, file.fileType.name)
+        }
+        startActivity(intent)
+    }
 }
 
 data class FileItem(
@@ -207,8 +243,11 @@ fun FileListScreen(
     modifier: Modifier = Modifier,
     files: List<FileItem>,
     onAddFileClick: () -> Unit,
-    onDeleteFile: (FileItem) -> Unit = {}
+    onDeleteFile: (FileItem) -> Unit = {},
+    onFileClick: (FileItem) -> Unit = {}
 ) {
+    val context = LocalContext.current
+    
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("文件列表 (${files.size})") },
@@ -241,7 +280,8 @@ fun FileListScreen(
                 items(files) { file ->
                     FileListItem(
                         file = file,
-                        onDelete = { onDeleteFile(file) }
+                        onDelete = { onDeleteFile(file) },
+                        onClick = { onFileClick(file) }
                     )
                 }
             }
@@ -259,12 +299,15 @@ private fun formatFileSize(size: Long): String {
 }
 
 @Composable
-fun FileListItem(file: FileItem, onDelete: () -> Unit) {
+fun FileListItem(file: FileItem, onDelete: () -> Unit, onClick: () -> Unit = {}) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier
@@ -295,6 +338,7 @@ fun FileListItem(file: FileItem, onDelete: () -> Unit) {
                 }
             }
             
+            // 删除按钮只在编辑模式下显示（这里简化为始终显示）
             IconButton(onClick = { showDeleteDialog = true }) {
                 Icon(
                     imageVector = Icons.Default.Add,

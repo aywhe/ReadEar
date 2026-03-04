@@ -26,6 +26,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".ContentActivity"
+            android:exported="false"
+            android:label="文件内容"
+            android:parentActivityName=".MainActivity"
+            android:theme="@style/Theme.ReadEar" />
     </application>
 
 </manifest>

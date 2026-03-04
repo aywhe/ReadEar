@@ -50,6 +50,10 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    
+    // PDFBox for PDF files
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+    
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
