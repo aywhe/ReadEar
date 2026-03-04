@@ -21,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -32,7 +33,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.readear.ui.theme.ReadEarTheme
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -98,7 +100,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openSystemFilePicker() {
-        val mimeTypes = arrayOf("*/*")
+        //val mimeTypes = arrayOf("*/*")
+        // 只允许选择 TXT、Word、PDF 文件
+        val mimeTypes = arrayOf(
+            "text/plain",                                    // TXT 文件
+            "application/msword",                            // Word (.doc)
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // Word (.docx)
+            "application/pdf"                                // PDF 文件
+        )
         fileBrowserLauncher.launch(mimeTypes)
     }
 
@@ -173,7 +182,7 @@ class MainActivity : ComponentActivity() {
             name.endsWith(".pdf") -> FileType.PDF
             name.endsWith(".doc") || name.endsWith(".docx") -> FileType.WORD
             name.endsWith(".txt") -> FileType.TXT
-            else -> FileType.TXT
+            else -> FileType.OTHER
         }
     }
 }
@@ -188,7 +197,8 @@ data class FileItem(
 enum class FileType(val iconResId: Int) {
     PDF(R.drawable.ic_pdf),
     WORD(R.drawable.ic_word),
-    TXT(R.drawable.ic_txt)
+    TXT(R.drawable.ic_txt),
+    OTHER(R.drawable.ic_other)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -197,11 +207,19 @@ fun FileListScreen(
     modifier: Modifier = Modifier,
     files: List<FileItem>,
     onAddFileClick: () -> Unit,
-    onDeleteFile: (FileItem) -> Unit
+    onDeleteFile: (FileItem) -> Unit = {}
 ) {
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text("文件列表") },
+            title = { Text("文件列表 (${files.size})") },
+            actions = {
+                IconButton(onClick = onAddFileClick) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "添加文件"
+                    )
+                }
+            },
             modifier = Modifier.padding(bottom = 8.dp)
         )
         
@@ -221,15 +239,29 @@ fun FileListScreen(
                 }
             } else {
                 items(files) { file ->
-                    FileListItem(file = file, onDelete = onDeleteFile)
+                    FileListItem(
+                        file = file,
+                        onDelete = { onDeleteFile(file) }
+                    )
                 }
             }
         }
     }
 }
 
+private fun formatFileSize(size: Long): String {
+    return when {
+        size < 1024 -> "$size B"
+        size < 1024 * 1024 -> "${size / 1024} KB"
+        size < 1024 * 1024 * 1024 -> "${size / (1024 * 1024)} MB"
+        else -> "${size / (1024 * 1024 * 1024)} GB"
+    }
+}
+
 @Composable
-fun FileListItem(file: FileItem, onDelete: (FileItem) -> Unit) {
+fun FileListItem(file: FileItem, onDelete: () -> Unit) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -248,20 +280,55 @@ fun FileListItem(file: FileItem, onDelete: (FileItem) -> Unit) {
             
             Spacer(modifier = Modifier.width(16.dp))
             
-            Text(
-                text = file.fileName,
-                style = MaterialTheme.typography.bodyLarge
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = file.fileName,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                
+                if (file.fileSize > 0) {
+                    Text(
+                        text = formatFileSize(file.fileSize),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             
-            Spacer(modifier = Modifier.weight(1f))
-            
-            IconButton(onClick = { onDelete(file) }) {
+            IconButton(onClick = { showDeleteDialog = true }) {
                 Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "删除"
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "删除",
+                    modifier = Modifier.rotate(45f)
                 )
             }
         }
+    }
+    
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("确认删除") },
+            text = { Text("确定要删除 \"${file.fileName}\" 吗？") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete()
+                        showDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("删除")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showDeleteDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 

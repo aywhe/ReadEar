@@ -6,6 +6,9 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
@@ -16,13 +19,14 @@ val Context.repositoryDataStore: DataStore<Preferences> by preferencesDataStore(
 class FileRepository(private val context: Context) {
     
     private val dataStore = context.repositoryDataStore
+    private val coroutineScope = CoroutineScope(Dispatchers.IO)
     
     /**
      * 异步保存文件列表到 DataStore
      * 在后台线程执行，不阻塞调用方
      */
     fun saveFileList(fileList: List<FileItem>) {
-        kotlinx.coroutines.GlobalScope.launch {
+        coroutineScope.launch {
             try {
                 val jsonArray = JSONArray()
                 fileList.forEach { file ->
