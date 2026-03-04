@@ -39,9 +39,16 @@ class MainActivity : ComponentActivity() {
         setContent {
             ReadEarTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    FileListScreen(
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                    Box(modifier = Modifier.padding(innerPadding)) {
+                        FileListScreen(
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        DraggableFloatingButton(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp)
+                        )
+                    }
                 }
             }
         }
@@ -122,6 +129,42 @@ fun FileListItem(file: FileItem) {
             Text(
                 text = file.fileName,
                 style = MaterialTheme.typography.bodyLarge
+            )
+        }
+    }
+}
+
+@Composable
+fun DraggableFloatingButton(modifier: Modifier = Modifier) {
+    var offset by remember { mutableStateOf(IntOffset.Zero) }
+    val density = LocalContext.current.resources.displayMetrics.density
+
+    Box(modifier = modifier) {
+        FloatingActionButton(
+            onClick = { /* TODO: Add click action */ },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = Color.White,
+            modifier = Modifier
+                .offset { offset }
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragStart = { },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            offset += IntOffset(
+                                dragAmount.x.toInt(),
+                                dragAmount.y.toInt()
+                            )
+                        }
+                    )
+                }
+                .size(56.dp),
+            shape = CircleShape
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "添加",
+                modifier = Modifier.size(24.dp)
             )
         }
     }
