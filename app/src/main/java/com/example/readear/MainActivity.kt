@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -38,12 +39,21 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            // 获取文件名
-            val fileName = getFileNameFromUri(it)
-            Toast.makeText(this, "选择了文件：$fileName", Toast.LENGTH_SHORT).show()
-            // TODO: 处理选中的文件
+            val fileInfo = getFileInfoFromUri(it)
+            Toast.makeText(this, "选择了文件：${fileInfo.fileName}", Toast.LENGTH_SHORT).show()
+            
+            val newFileItem = FileItem(
+                fileName = fileInfo.fileName,
+                fileType = getFileTypeFromName(fileInfo.fileName),
+                fileUri = it.toString(),
+                fileSize = fileInfo.fileSize
+            )
+            
+            addFileToList(newFileItem)
         }
     }
+
+    private var fileList by mutableStateOf<List<FileItem>>(emptyList())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,7 +63,9 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
                         FileListScreen(
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            files = fileList,
+                            onAddFileClick = { openSystemFilePicker() }
                         )
                         DraggableFloatingButton(
                             modifier = Modifier
@@ -78,33 +90,71 @@ class MainActivity : ComponentActivity() {
         fileBrowserLauncher.launch(mimeTypes)
     }
 
-    private fun getFileNameFromUri(uri: Uri): String {
-        var fileName = ""
+    private fun addFileToList(newFile: FileItem) {
+        // 检查是否已存在相同 URI 的文件
+        val existingIndex = fileList.indexOfFirst { it.fileUri == newFile.fileUri }
         
-        // 尝试从 display name 获取文件名
+        fileList = if (existingIndex >= 0) {
+            // 如果已存在，移除旧的项目，然后将新项目放到第一位
+            val updatedList = fileList.toMutableList().apply {
+                removeAt(existingIndex)
+                add(0, newFile)
+            }
+            updatedList
+        } else {
+            // 如果不存在，直接添加到第一位
+            listOf(newFile) + fileList
+        }
+    }
+
+    private data class FileInfo(
+        val fileName: String,
+        val fileSize: Long
+    )
+
+    private fun getFileInfoFromUri(uri: Uri): FileInfo {
+        var fileName = ""
+        var fileSize: Long = -1
+        
         if (uri.scheme == "content") {
             contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
-                    val displayNameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    val displayNameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                     if (displayNameIndex >= 0) {
-                        fileName = cursor.getString(displayNameIndex) ?: uri.lastPathSegment ?: "未知文件"
+                        fileName = cursor.getString(displayNameIndex) ?: "未知文件"
+                    }
+                    
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (sizeIndex >= 0) {
+                        fileSize = cursor.getLong(sizeIndex)
                     }
                 }
             }
         }
         
-        // 如果获取失败，使用 lastPathSegment
         if (fileName.isEmpty()) {
             fileName = uri.lastPathSegment ?: "未知文件"
         }
         
-        return fileName
+        return FileInfo(fileName, fileSize)
+    }
+
+    private fun getFileTypeFromName(fileName: String): FileType {
+        val name = fileName.lowercase()
+        return when {
+            name.endsWith(".pdf") -> FileType.PDF
+            name.endsWith(".doc") || name.endsWith(".docx") -> FileType.WORD
+            name.endsWith(".txt") -> FileType.TXT
+            else -> FileType.TXT
+        }
     }
 }
 
 data class FileItem(
     val fileName: String,
-    val fileType: FileType
+    val fileType: FileType,
+    val fileUri: String = "",
+    val fileSize: Long = -1L
 )
 
 enum class FileType(val iconResId: Int) {
@@ -115,26 +165,11 @@ enum class FileType(val iconResId: Int) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FileListScreen(modifier: Modifier = Modifier) {
-    val files = listOf(
-        FileItem("项目文档.pdf", FileType.PDF),
-        FileItem("需求说明.docx", FileType.WORD),
-        FileItem("笔记.txt", FileType.TXT),
-        FileItem("技术手册.pdf", FileType.PDF),
-        FileItem("会议记录.docx", FileType.WORD),
-        FileItem("项目文档.pdf", FileType.PDF),
-        FileItem("需求说明.docx", FileType.WORD),
-        FileItem("笔记.txt", FileType.TXT),
-        FileItem("技术手册.pdf", FileType.PDF),
-        FileItem("会议记录.docx", FileType.WORD),
-        FileItem("项目文档.pdf", FileType.PDF),
-        FileItem("需求说明.docx", FileType.WORD),
-        FileItem("笔记.txt", FileType.TXT),
-        FileItem("技术手册.pdf", FileType.PDF),
-        FileItem("会议记录.docx", FileType.WORD),
-        FileItem("日志.txt", FileType.TXT)
-    )
-
+fun FileListScreen(
+    modifier: Modifier = Modifier,
+    files: List<FileItem>,
+    onAddFileClick: () -> Unit
+) {
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("文件列表") },
@@ -146,8 +181,19 @@ fun FileListScreen(modifier: Modifier = Modifier) {
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(files) { file ->
-                FileListItem(file = file)
+            if (files.isEmpty()) {
+                item {
+                    Text(
+                        text = "暂无文件，点击 + 号或浮动按钮添加文件",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            } else {
+                items(files) { file ->
+                    FileListItem(file = file)
+                }
             }
         }
     }
@@ -223,6 +269,13 @@ fun DraggableFloatingButton(
 @Composable
 fun FileListScreenPreview() {
     ReadEarTheme {
-        FileListScreen()
+        FileListScreen(
+            files = listOf(
+                FileItem("项目文档.pdf", FileType.PDF, "content://com.android.providers.media.documents/document/pdf%3A12345", 1024 * 512),
+                FileItem("需求说明.docx", FileType.WORD, "content://com.android.providers.media.documents/document/word%3A67890", 1024 * 256),
+                FileItem("笔记.txt", FileType.TXT, "content://com.android.providers.media.documents/document/text%3A11111", 1024 * 10)
+            ),
+            onAddFileClick = {}
+        )
     }
 }
