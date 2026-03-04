@@ -1,6 +1,7 @@
 package com.example.readear
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -33,6 +34,17 @@ import androidx.core.content.ContextCompat
 import com.example.readear.ui.theme.ReadEarTheme
 
 class MainActivity : ComponentActivity() {
+    private val fileBrowserLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            // 获取文件名
+            val fileName = getFileNameFromUri(it)
+            Toast.makeText(this, "选择了文件：$fileName", Toast.LENGTH_SHORT).show()
+            // TODO: 处理选中的文件
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -46,12 +58,47 @@ class MainActivity : ComponentActivity() {
                         DraggableFloatingButton(
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
-                                .padding(16.dp)
+                                .padding(16.dp),
+                            onClick = { openSystemFilePicker() }
                         )
                     }
                 }
             }
         }
+    }
+
+    private fun openSystemFilePicker() {
+        // 支持所有类型的文件
+        val mimeTypes = arrayOf(
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "text/plain"
+        )
+        fileBrowserLauncher.launch(mimeTypes)
+    }
+
+    private fun getFileNameFromUri(uri: Uri): String {
+        var fileName = ""
+        
+        // 尝试从 display name 获取文件名
+        if (uri.scheme == "content") {
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val displayNameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (displayNameIndex >= 0) {
+                        fileName = cursor.getString(displayNameIndex) ?: uri.lastPathSegment ?: "未知文件"
+                    }
+                }
+            }
+        }
+        
+        // 如果获取失败，使用 lastPathSegment
+        if (fileName.isEmpty()) {
+            fileName = uri.lastPathSegment ?: "未知文件"
+        }
+        
+        return fileName
     }
 }
 
@@ -135,13 +182,15 @@ fun FileListItem(file: FileItem) {
 }
 
 @Composable
-fun DraggableFloatingButton(modifier: Modifier = Modifier) {
+fun DraggableFloatingButton(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
+) {
     var offset by remember { mutableStateOf(IntOffset.Zero) }
-    val density = LocalContext.current.resources.displayMetrics.density
 
     Box(modifier = modifier) {
         FloatingActionButton(
-            onClick = { /* TODO: Add click action */ },
+            onClick = onClick,
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = Color.White,
             modifier = Modifier
