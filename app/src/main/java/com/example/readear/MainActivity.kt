@@ -1,10 +1,7 @@
 package com.example.readear
 
-import android.Manifest
-import android.content.Intent
-import android.content.pm.PackageManager
+import android.content.Context
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.widget.Toast
@@ -31,8 +28,16 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.core.content.ContextCompat
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStore
 import com.example.readear.ui.theme.ReadEarTheme
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "file_list")
 
 class MainActivity : ComponentActivity() {
     private val fileBrowserLauncher = registerForActivityResult(
@@ -50,14 +55,20 @@ class MainActivity : ComponentActivity() {
             )
             
             addFileToList(newFileItem)
+            // 异步保存，不阻塞 UI
+            FileRepository(applicationContext).saveFileList(fileList)
         }
     }
 
     private var fileList by mutableStateOf<List<FileItem>>(emptyList())
+    private lateinit var fileRepository: FileRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        fileRepository = FileRepository(applicationContext)
+        
         setContent {
             ReadEarTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -65,7 +76,11 @@ class MainActivity : ComponentActivity() {
                         FileListScreen(
                             modifier = Modifier.fillMaxSize(),
                             files = fileList,
-                            onAddFileClick = { openSystemFilePicker() }
+                            onAddFileClick = { openSystemFilePicker() },
+                            onDeleteFile = { file ->
+                                deleteFileFromList(file)
+                                FileRepository(applicationContext).saveFileList(fileList)
+                            }
                         )
                         DraggableFloatingButton(
                             modifier = Modifier
@@ -77,33 +92,46 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        
+        // 异步恢复数据
+        restoreFileList()
     }
 
     private fun openSystemFilePicker() {
-        // 支持所有类型的文件
-        val mimeTypes = arrayOf(
-            "application/pdf",
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "text/plain"
-        )
+        val mimeTypes = arrayOf("*/*")
         fileBrowserLauncher.launch(mimeTypes)
     }
 
     private fun addFileToList(newFile: FileItem) {
-        // 检查是否已存在相同 URI 的文件
         val existingIndex = fileList.indexOfFirst { it.fileUri == newFile.fileUri }
         
         fileList = if (existingIndex >= 0) {
-            // 如果已存在，移除旧的项目，然后将新项目放到第一位
             val updatedList = fileList.toMutableList().apply {
                 removeAt(existingIndex)
                 add(0, newFile)
             }
             updatedList
         } else {
-            // 如果不存在，直接添加到第一位
             listOf(newFile) + fileList
+        }
+    }
+
+    private fun deleteFileFromList(file: FileItem) {
+        fileList = fileList.filter { it.fileUri != file.fileUri }
+    }
+
+    private fun restoreFileList() {
+        // 在后台协程中异步加载数据
+        kotlinx.coroutines.GlobalScope.launch {
+            try {
+                val restoredList = fileRepository.loadFileList()
+                // 切换回主线程更新 UI
+                with(kotlinx.coroutines.Dispatchers.Main) {
+                    fileList = restoredList
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
@@ -168,7 +196,8 @@ enum class FileType(val iconResId: Int) {
 fun FileListScreen(
     modifier: Modifier = Modifier,
     files: List<FileItem>,
-    onAddFileClick: () -> Unit
+    onAddFileClick: () -> Unit,
+    onDeleteFile: (FileItem) -> Unit
 ) {
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
@@ -192,7 +221,7 @@ fun FileListScreen(
                 }
             } else {
                 items(files) { file ->
-                    FileListItem(file = file)
+                    FileListItem(file = file, onDelete = onDeleteFile)
                 }
             }
         }
@@ -200,7 +229,7 @@ fun FileListScreen(
 }
 
 @Composable
-fun FileListItem(file: FileItem) {
+fun FileListItem(file: FileItem, onDelete: (FileItem) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -223,6 +252,15 @@ fun FileListItem(file: FileItem) {
                 text = file.fileName,
                 style = MaterialTheme.typography.bodyLarge
             )
+            
+            Spacer(modifier = Modifier.weight(1f))
+            
+            IconButton(onClick = { onDelete(file) }) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "删除"
+                )
+            }
         }
     }
 }
