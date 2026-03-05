@@ -107,6 +107,8 @@ class MainActivity : ComponentActivity() {
                             onAddFileClick = { openSystemFilePicker() },
                             onDeleteFile = { file ->
                                 deleteFileFromList(file)
+                                // 清除对应的缓存
+                                TextCacheManager(applicationContext).clearCache(file.fileUri)
                                 FileRepository(applicationContext).saveFileList(fileList)
                             },
                             onFileClick = { file ->

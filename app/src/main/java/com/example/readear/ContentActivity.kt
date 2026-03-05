@@ -104,7 +104,7 @@ fun ContentScreen(
     var maxLinesPerPage by remember { mutableIntStateOf(0) }
     var isParamsInitialized by remember { mutableStateOf(false) }
     
-    // 启动文本提取（一次性异步提取所有文本）
+    // 启动文本加载（后台自动判断是否使用缓存）
     LaunchedEffect(uri, fileType) {
         isLoading = true
         errorMessage = null
@@ -130,30 +130,23 @@ fun ContentScreen(
         }
         
         try {
-            val extractor = TextExtractorFactory.getExtractor(context, fileType)
-            val paginationProcessor = TextPaginationProcessor()
-            
-            lifecycleScope.launch {
-                // 模块 1：提取原始文本流
-                val rawTextFlow = extractor.extractTextRaw(uri)
-                
-                // 模块 2：处理文本流并分页
-                paginationProcessor.paginateText(rawTextFlow, avgCharsPerLine, maxLinesPerPage)
-                    .collectLatest { chunk ->
-                        textChunks = textChunks + chunk
-                        totalExtractedChars += chunk.content.length
-                        isLoading = false
-                        
-                        if (textChunks.size == 1) {
-                            lifecycleScope.launch {
-                                pagerState.scrollToPage(0)
-                            }
+            // 使用 TextContentManager 统一加载（自动处理缓存）
+            val textContentManager = TextContentManager(context)
+            textContentManager.loadTextContent(uri, fileType, avgCharsPerLine, maxLinesPerPage)
+                .collectLatest { chunk ->
+                    textChunks = textChunks + chunk
+                    totalExtractedChars += chunk.content.length
+                    isLoading = false
+                    
+                    if (textChunks.size == 1) {
+                        lifecycleScope.launch {
+                            pagerState.scrollToPage(0)
                         }
                     }
-            }
+                }
         } catch (e: Exception) {
             e.printStackTrace()
-            errorMessage = "提取失败：${e.message}"
+            errorMessage = "加载失败：${e.message}"
             isLoading = false
         }
     }
@@ -207,7 +200,7 @@ fun ContentScreen(
             // 1. 计算每行平均字符数（左右留安全距离）
             val fontSizePx = with(density) { defaultFontSize.toPx() }
             val charAspectRatio = 1.0f // 汉字宽高比约 1:1
-            val avgCharWidth = fontSizePx * charAspectRatio * 0.9f // 考虑字间距，留 10% 余量
+            val avgCharWidth = fontSizePx * charAspectRatio * 1.1f // 考虑字间距，增加 10%
             avgCharsPerLine = (availableWidth / avgCharWidth).toInt()
             
             // 2. 计算每页最大行数（上下留安全距离，已排除标题栏）
