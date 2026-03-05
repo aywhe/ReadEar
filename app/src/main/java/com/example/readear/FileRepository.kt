@@ -49,6 +49,22 @@ class FileRepository(private val context: Context) {
     }
     
     /**
+     * 删除文件及其相关缓存和进度
+     * @param file 要删除的文件
+     * @param fileList 当前文件列表
+     */
+    fun deleteFile(file: FileItem, fileList: List<FileItem>) {
+        // 清除缓存和阅读进度
+        val cacheManager = TextCacheManager(context)
+        cacheManager.clearCache(file.fileUri)
+        cacheManager.clearReadingProgress(file.fileUri)
+        
+        // 从列表中移除并保存
+        val updatedList = fileList.filter { it.fileUri != file.fileUri }
+        saveFileList(updatedList)
+    }
+    
+    /**
      * 从 DataStore 加载文件列表
      * 需要在协程中调用
      */

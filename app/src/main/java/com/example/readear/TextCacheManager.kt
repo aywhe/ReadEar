@@ -79,22 +79,34 @@ class TextCacheManager(private val context: Context) {
     }.flowOn(Dispatchers.IO)
     
     /**
-     * 保存文本到缓存
+     * 保存文本到缓存（同时保存分页信息和进度）
      * @param uri 文件 URI
      * @param textFlow 原始文本流
+     * @param paginationProcessor 分页处理器
+     * @param avgCharsPerLine 每行字符数
+     * @param maxLinesPerPage 每页最大行数
      */
-    suspend fun saveToCache(uri: String, textFlow: Flow<String>) {
+    suspend fun saveToCache(uri: String, textFlow: Flow<String>, paginationProcessor: TextPaginationProcessor, avgCharsPerLine: Int, maxLinesPerPage: Int) {
         val cacheFile = getCacheFile(uri)
+        val progressFile = File(cacheDir, "${getCacheFileName(uri)}.progress")
         
         // 使用临时文件，避免写入过程中被读取
         val tempFile = File(cacheDir, "${getCacheFileName(uri)}.tmp")
         
         try {
+            // 先分页，然后保存为 JSON 格式：每行是一个页面对象
+            var pageNumber = 0
             tempFile.bufferedWriter().use { writer ->
-                textFlow.collect { text ->
-                    writer.write(text)
+                paginationProcessor.paginateText(textFlow, avgCharsPerLine, maxLinesPerPage).collect { chunk ->
+                    // 保存为 JSON 格式：{"page":0,"content":"..."}
+                    val pageJson = "{\"page\":$pageNumber,\"content\":\"${escapeJson(chunk.content)}\"}"
+                    writer.write(pageJson)
                     writer.newLine()
+                    pageNumber++
                 }
+                
+                // 同时保存总页数和最后一页的页码
+                progressFile.writeText("{\"totalPages\":$pageNumber,\"lastPage\":${pageNumber - 1}}")
             }
             
             // 写入完成后，重命名为正式缓存文件
@@ -103,6 +115,18 @@ class TextCacheManager(private val context: Context) {
             e.printStackTrace()
             tempFile.delete()
         }
+    }
+    
+    /**
+     * 转义 JSON 特殊字符
+     */
+    private fun escapeJson(text: String): String {
+        return text
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
     }
     
     /**
@@ -124,14 +148,129 @@ class TextCacheManager(private val context: Context) {
         val progressFile = File(cacheDir, "${getCacheFileName(uri)}.progress")
         if (!progressFile.exists()) return 0
         
-        return progressFile.readText().toIntOrNull() ?: 0
+        try {
+            val json = progressFile.readText()
+            val jsonObj = org.json.JSONObject(json)
+            return jsonObj.optInt("lastPage", 0)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return 0
+        }
     }
+    
+    /**
+     * 从缓存快速加载指定页面及其后续页面（懒加载）
+     * @param uri 文件 URI
+     * @param startPage 起始页码
+     * @param avgCharsPerLine 每行字符数
+     * @param maxLinesPerPage 每页最大行数
+     * @return 返回分页后的文本块 Flow
+     */
+    fun loadPagesFromCache(
+        uri: String,
+        startPage: Int,
+        avgCharsPerLine: Int,
+        maxLinesPerPage: Int
+    ): Flow<TextChunk> = flow {
+        val cacheFile = getCacheFile(uri)
+        if (!cacheFile.exists()) return@flow
+        
+        // 使用缓冲读取器逐行读取
+        cacheFile.bufferedReader().useLines { lines ->
+            lines.forEach { line ->
+                if (line.trim().isEmpty()) return@forEach
+                
+                try {
+                    val jsonObj = org.json.JSONObject(line)
+                    val pageNumber = jsonObj.getInt("page")
+                    val content = jsonObj.getString("content")
+                    
+                    // 只发射从 startPage 开始的页面
+                    if (pageNumber >= startPage) {
+                        emit(
+                            TextChunk(
+                                content = content,
+                                chapterTitle = (pageNumber + 1).toString(),
+                                isComplete = false,
+                                chapterIndex = pageNumber + 1
+                            )
+                        )
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    // 跳过损坏的行
+                }
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+    
+    /**
+     * 从缓存倒序加载指定页面之前的页面（前向加载）
+     * @param uri 文件 URI
+     * @param endPage 结束页码（不包含）
+     * @param avgCharsPerLine 每行字符数
+     * @param maxLinesPerPage 每页最大行数
+     * @return 返回分页后的文本块 Flow（倒序发射）
+     */
+    fun loadPreviousPagesFromCache(
+        uri: String,
+        endPage: Int,
+        avgCharsPerLine: Int,
+        maxLinesPerPage: Int
+    ): Flow<TextChunk> = flow {
+        val cacheFile = getCacheFile(uri)
+        if (!cacheFile.exists()) return@flow
+        
+        // 先收集所有前面的页面
+        val previousPages = mutableListOf<TextChunk>()
+        
+        // 使用缓冲读取器逐行读取
+        cacheFile.bufferedReader().useLines { lines ->
+            lines.forEach { line ->
+                if (line.trim().isEmpty()) return@forEach
+                
+                try {
+                    val jsonObj = org.json.JSONObject(line)
+                    val pageNumber = jsonObj.getInt("page")
+                    val content = jsonObj.getString("content")
+                    
+                    // 收集 endPage 之前的页面
+                    if (pageNumber < endPage) {
+                        previousPages.add(
+                            TextChunk(
+                                content = content,
+                                chapterTitle = (pageNumber + 1).toString(),
+                                isComplete = false,
+                                chapterIndex = pageNumber + 1
+                            )
+                        )
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    // 跳过损坏的行
+                }
+            }
+        }
+        
+        // 倒序发射（从最近的往前）
+        for (i in previousPages.lastIndex downTo 0) {
+            emit(previousPages[i])
+        }
+    }.flowOn(Dispatchers.IO)
     
     /**
      * 清除指定 URI 的缓存
      */
     fun clearCache(uri: String) {
         getCacheFile(uri).delete()
+    }
+    
+    /**
+     * 清除指定 URI 的阅读进度
+     */
+    fun clearReadingProgress(uri: String) {
+        val progressFile = File(cacheDir, "${getCacheFileName(uri)}.progress")
+        progressFile.delete()
     }
     
     /**

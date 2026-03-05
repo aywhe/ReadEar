@@ -107,9 +107,8 @@ class MainActivity : ComponentActivity() {
                             onAddFileClick = { openSystemFilePicker() },
                             onDeleteFile = { file ->
                                 deleteFileFromList(file)
-                                // 清除对应的缓存
-                                TextCacheManager(applicationContext).clearCache(file.fileUri)
-                                FileRepository(applicationContext).saveFileList(fileList)
+                                // 使用 FileRepository 统一处理删除逻辑
+                                fileRepository.deleteFile(file, fileList)
                             },
                             onFileClick = { file ->
                                 openContentActivity(file)
@@ -173,8 +172,9 @@ class MainActivity : ComponentActivity() {
                             uri,
                             Intent.FLAG_GRANT_READ_URI_PERMISSION
                         )
-                    } catch (e: Exception) {
-                        // 忽略异常
+                    } catch (e: SecurityException) {
+                        // 记录权限获取失败的 URI（可能是文件已被删除或移动）
+                        android.util.Log.w("MainActivity", "无法获取 URI 权限：${fileItem.fileUri}", e)
                     }
                 }
                 // 切换回主线程更新 UI

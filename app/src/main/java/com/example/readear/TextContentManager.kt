@@ -35,23 +35,35 @@ class TextContentManager(private val context: Context) {
         
         // 优先尝试从缓存加载
         if (cacheManager.hasCache(uriString)) {
-            // 有缓存，直接从缓存读取
-            cacheManager.readFromCache(uriString, avgCharsPerLine, maxLinesPerPage)
-                .collect { chunk ->
-                    emit(chunk)
-                }
+            // 读取上次阅读进度
+            val lastPage = cacheManager.readReadingProgress(uriString)
+            
+            // 如果有上次阅读记录，快速加载该页面
+            if (lastPage > 0) {
+                // 先加载上次阅读的页面及其后续页面
+                cacheManager.loadPagesFromCache(uriString, lastPage, avgCharsPerLine, maxLinesPerPage)
+                    .collect { chunk ->
+                        emit(chunk)
+                    }
+            } else {
+                // 没有阅读记录，从头开始加载
+                cacheManager.readFromCache(uriString, avgCharsPerLine, maxLinesPerPage)
+                    .collect { chunk ->
+                        emit(chunk)
+                    }
+            }
         } else {
             // 没有缓存，从源文件提取并保存缓存
             val extractor = TextExtractorFactory.getExtractor(context, fileType)
             val rawTextFlow = extractor.extractTextRaw(uri)
+            val paginationProcessor = TextPaginationProcessor()
             
             // 异步保存到缓存（不阻塞当前流程）
             GlobalScope.launch(Dispatchers.IO) {
-                cacheManager.saveToCache(uriString, rawTextFlow)
+                cacheManager.saveToCache(uriString, rawTextFlow, paginationProcessor, avgCharsPerLine, maxLinesPerPage)
             }
             
             // 同时，直接分页显示
-            val paginationProcessor = TextPaginationProcessor()
             paginationProcessor.paginateText(rawTextFlow, avgCharsPerLine, maxLinesPerPage)
                 .collect { chunk ->
                     emit(chunk)
