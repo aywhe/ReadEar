@@ -118,9 +118,6 @@ fun ContentScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var totalExtractedChars by remember { mutableStateOf(0) }
     
-    // 用于追加文本块的可变列表（避免每次创建新列表）
-    val chunksList = remember { mutableListOf<TextChunk>() }
-    
     val lifecycleScope = rememberCoroutineScope()
     val pagerState = rememberPagerState(pageCount = { textChunks.size })
     
@@ -175,38 +172,24 @@ fun ContentScreen(
                 lastPageNumber = cacheManager.readReadingProgress(uriString)
             }
             
-            val mainJob = lifecycleScope.launch {
-                textContentManager.loadTextContent(uri, fileType, avgCharsPerLine, maxLinesPerPage)
-                    .collectLatest { chunk ->
-                        // 直接添加到列表（主线程安全）
-                        chunksList.add(chunk)
-                        textChunks = chunksList.toList()
-                        totalExtractedChars += chunk.content.length
-                        isLoading = false
-                        
-                        // 第一次加载完成，跳转到上次阅读的页面
-                        if (textChunks.size == 1 && lastPageNumber > 0) {
-                            pagerState.scrollToPage(lastPageNumber.coerceIn(0, textChunks.size - 1))
+            textContentManager.loadTextContent(uri, fileType, avgCharsPerLine, maxLinesPerPage)
+                .collectLatest { chunk ->
+                    textChunks = textChunks + chunk
+                    totalExtractedChars += chunk.content.length
+                    isLoading = false
+                    
+                    if (textChunks.size == 1) {
+                        lifecycleScope.launch {
+                            // 第一次加载完成，跳转到上次阅读的页面（如果有的话）
+                            val targetPage = lastPageNumber.coerceIn(0, textChunks.size - 1)
+                            if (targetPage > 0) {
+                                pagerState.scrollToPage(targetPage)
+                            } else {
+                                pagerState.scrollToPage(0)
+                            }
                         }
                     }
-            }
-            
-            // 如果有上次阅读记录，启动前向加载任务
-            if (lastPageNumber > 0) {
-                lifecycleScope.launch {
-                    try {
-                        cacheManager.loadPreviousPagesFromCache(uriString, lastPageNumber, avgCharsPerLine, maxLinesPerPage)
-                            .collect { chunk ->
-                                // 插入到开头（主线程安全）
-                                chunksList.add(0, chunk)
-                                textChunks = chunksList.toList()
-                                totalExtractedChars += chunk.content.length
-                            }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
                 }
-            }
         } catch (e: Exception) {
             e.printStackTrace()
             errorMessage = "加载失败：${e.message}"

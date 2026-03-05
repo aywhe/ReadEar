@@ -20,15 +20,12 @@ class PdfExtractor(private val context: Context) : TextExtractor {
                     val numberOfPages = document.numberOfPages
                     
                     val pdfTextStripper = com.tom_roush.pdfbox.text.PDFTextStripper()
-                    // 批量提取，减少 IO 操作（每次处理 5 页）
-                    val batchSize = 5
+                    pdfTextStripper.startPage = 1
                     
-                    for (startPage in 1..numberOfPages step batchSize) {
-                        val endPage = minOf(startPage + batchSize - 1, numberOfPages)
-                        pdfTextStripper.startPage = startPage
-                        pdfTextStripper.endPage = endPage
+                    for (i in 1..numberOfPages) {
+                        pdfTextStripper.startPage = i
+                        pdfTextStripper.endPage = i
                         val text = pdfTextStripper.getText(document)
-                        
                         // 按段落发出文本
                         text.lines().forEach { line ->
                             if (line.isNotEmpty()) {
