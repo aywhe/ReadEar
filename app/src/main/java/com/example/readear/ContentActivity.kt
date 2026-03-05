@@ -36,6 +36,9 @@ class ContentActivity : ComponentActivity() {
         const val EXTRA_FILE_TYPE = "extra_file_type"
     }
     
+    // 当前阅读页码
+    private var currentPageNumber: Int = 0
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -63,9 +66,36 @@ class ContentActivity : ComponentActivity() {
                     uri = fileUri,
                     fileName = fileName,
                     fileType = fileType,
-                    onNavigateBack = { finish() }
+                    onNavigateBack = { finish() },
+                    onPageChanged = { page -> currentPageNumber = page }
                 )
             }
+        }
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // 用户离开时保存阅读进度
+        saveReadingProgress()
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        // 应用挂起/关闭时保存阅读进度
+        saveReadingProgress()
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // 确保最后一次保存
+        saveReadingProgress()
+    }
+    
+    private fun saveReadingProgress() {
+        if (currentPageNumber > 0) {
+            val uriString = intent.getStringExtra(EXTRA_FILE_URI) ?: return
+            val cacheManager = TextCacheManager(applicationContext)
+            cacheManager.saveReadingProgress(uriString, currentPageNumber)
         }
     }
 }
@@ -76,7 +106,8 @@ fun ContentScreen(
     uri: Uri,
     fileName: String,
     fileType: FileType,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onPageChanged: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -132,6 +163,15 @@ fun ContentScreen(
         try {
             // 使用 TextContentManager 统一加载（自动处理缓存）
             val textContentManager = TextContentManager(context)
+            val cacheManager = TextCacheManager(context)
+            val uriString = uri.toString()
+            
+            // 如果有缓存，先读取上次阅读进度
+            var lastPageNumber = 0
+            if (cacheManager.hasCache(uriString)) {
+                lastPageNumber = cacheManager.readReadingProgress(uriString)
+            }
+            
             textContentManager.loadTextContent(uri, fileType, avgCharsPerLine, maxLinesPerPage)
                 .collectLatest { chunk ->
                     textChunks = textChunks + chunk
@@ -140,7 +180,13 @@ fun ContentScreen(
                     
                     if (textChunks.size == 1) {
                         lifecycleScope.launch {
-                            pagerState.scrollToPage(0)
+                            // 第一次加载完成，跳转到上次阅读的页面（如果有的话）
+                            val targetPage = lastPageNumber.coerceIn(0, textChunks.size - 1)
+                            if (targetPage > 0) {
+                                pagerState.scrollToPage(targetPage)
+                            } else {
+                                pagerState.scrollToPage(0)
+                            }
                         }
                     }
                 }
@@ -260,7 +306,8 @@ fun ContentScreen(
                     Column(modifier = Modifier.fillMaxSize()) {
                         HorizontalPager(
                             state = pagerState,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            beyondViewportPageCount = textChunks.size
                         ) { page ->
                             PageContent(chunk = textChunks[page])
                         }
@@ -269,6 +316,13 @@ fun ContentScreen(
                             LinearProgressIndicator(
                                 modifier = Modifier.fillMaxWidth()
                             )
+                        }
+                    }
+                    
+                    // 监听页面变化，通知 Activity（由 Activity 在退出时保存）
+                    LaunchedEffect(pagerState.currentPage) {
+                        if (textChunks.isNotEmpty()) {
+                            onPageChanged(pagerState.currentPage)
                         }
                     }
                 }

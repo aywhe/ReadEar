@@ -106,6 +106,28 @@ class TextCacheManager(private val context: Context) {
     }
     
     /**
+     * 保存阅读进度（页码）
+     * @param uri 文件 URI
+     * @param pageNumber 当前页码（从 0 开始）
+     */
+    fun saveReadingProgress(uri: String, pageNumber: Int) {
+        val progressFile = File(cacheDir, "${getCacheFileName(uri)}.progress")
+        progressFile.writeText(pageNumber.toString())
+    }
+    
+    /**
+     * 读取阅读进度（页码）
+     * @param uri 文件 URI
+     * @return 返回上次阅读的页码，如果没有则返回 0
+     */
+    fun readReadingProgress(uri: String): Int {
+        val progressFile = File(cacheDir, "${getCacheFileName(uri)}.progress")
+        if (!progressFile.exists()) return 0
+        
+        return progressFile.readText().toIntOrNull() ?: 0
+    }
+    
+    /**
      * 清除指定 URI 的缓存
      */
     fun clearCache(uri: String) {
