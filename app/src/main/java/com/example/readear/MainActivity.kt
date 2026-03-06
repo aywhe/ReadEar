@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
-import android.util.DisplayMetrics
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,11 +34,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.readear.ui.theme.ReadEarTheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import org.json.JSONArray
-import org.json.JSONObject
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "file_list")
 
@@ -108,7 +103,7 @@ class MainActivity : ComponentActivity() {
                             onDeleteFile = { file ->
                                 deleteFileFromList(file)
                                 // 清除对应的缓存
-                                TextCacheManager(applicationContext).clearCache(file.fileUri)
+                                CacheManager(applicationContext).clearCache(file.fileUri)
                                 FileRepository(applicationContext).saveFileList(fileList)
                             },
                             onFileClick = { file ->

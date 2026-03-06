@@ -1,5 +1,6 @@
 package com.example.readear
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -22,10 +23,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.layout.onGloballyPositioned
 import com.example.readear.ui.theme.ReadEarTheme
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import androidx.core.net.toUri
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class ContentActivity : ComponentActivity() {
@@ -34,10 +39,20 @@ class ContentActivity : ComponentActivity() {
         const val EXTRA_FILE_URI = "extra_file_uri"
         const val EXTRA_FILE_NAME = "extra_file_name"
         const val EXTRA_FILE_TYPE = "extra_file_type"
+        
+        // 页面布局参数的默认值（基于标准字体大小和行高）
+        private const val DEFAULT_FONT_SIZE = 16f // sp
+        private const val BASE_LINE_HEIGHT = 24f // sp
+        private const val LINE_HEIGHT_SCALE = 1.5f // 行距倍数
+        private const val CHAR_ASPECT_RATIO = 1.0f // 汉字宽高比
+        private const val CHAR_SPACING_FACTOR = 1.1f // 字间距系数
     }
     
     // 当前阅读页码
     private var currentPageNumber: Int = 0
+    
+    // 用于保存进度的协程作用域
+    private val progressScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,18 +62,9 @@ class ContentActivity : ComponentActivity() {
         val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "未知文件"
         val fileType = FileType.valueOf(intent.getStringExtra(EXTRA_FILE_TYPE) ?: FileType.TXT.name)
         
-        // 获取 URI 并请求临时读取权限
-        val fileUri = Uri.parse(fileUriString)
-        try {
-            contentResolver.takePersistableUriPermission(
-                fileUri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        } catch (e: SecurityException) {
-            e.printStackTrace()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        // 获取 URI 并请求持久化读取权限
+        val fileUri = fileUriString.toUri()
+        ensurePersistedUriPermission(fileUri)
         
         setContent {
             ReadEarTheme {
@@ -73,30 +79,45 @@ class ContentActivity : ComponentActivity() {
         }
     }
     
+    /**
+     * 确保已获取 URI 的持久化读取权限
+     * 如果已存在则跳过，避免重复申请
+     * 
+     * @param uri 需要访问的文件 URI
+     */
+    private fun ensurePersistedUriPermission(uri: Uri) {
+        try {
+            // 检查是否已经有持久化权限
+            val hasPermission = contentResolver.persistedUriPermissions.any { 
+                it.uri == uri && it.isReadPermission 
+            }
+            
+            // 如果没有权限，才申请新的
+            if (!hasPermission) {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+        } catch (e: SecurityException) {
+            e.printStackTrace()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
     override fun onPause() {
         super.onPause()
-        // 用户离开时保存阅读进度
-        saveReadingProgress()
     }
     
     override fun onStop() {
         super.onStop()
-        // 应用挂起/关闭时保存阅读进度
-        saveReadingProgress()
     }
     
     override fun onDestroy() {
         super.onDestroy()
-        // 确保最后一次保存
-        saveReadingProgress()
-    }
-    
-    private fun saveReadingProgress() {
-        if (currentPageNumber > 0) {
-            val uriString = intent.getStringExtra(EXTRA_FILE_URI) ?: return
-            val cacheManager = TextCacheManager(applicationContext)
-            cacheManager.saveReadingProgress(uriString, currentPageNumber)
-        }
+        // 取消协程作用域
+        progressScope.cancel()
     }
 }
 
@@ -124,16 +145,8 @@ fun ContentScreen(
     // 控制跳转对话框的显示
     var showJumpDialog by remember { mutableStateOf(false) }
     
-    // 页面布局参数 - 每页能显示的字符数（由后台根据行数自动计算）
-    // 基于固定的字体大小（16sp）和行高（24sp * 1.5）
-    val defaultFontSize = 16.sp
-    val baseLineHeight = 24.sp
-    val scaledLineHeight = baseLineHeight * 1.5f
-    
-    // 计算每页能显示的行数和每行字符数
-    var avgCharsPerLine by remember { mutableIntStateOf(0) }
-    var maxLinesPerPage by remember { mutableIntStateOf(0) }
-    var isParamsInitialized by remember { mutableStateOf(false) }
+    // 计算页面布局参数
+    val layoutParams = rememberLayoutParameters(context, density)
     
     // 启动文本加载（后台自动判断是否使用缓存）
     LaunchedEffect(uri, fileType) {
@@ -141,60 +154,6 @@ fun ContentScreen(
         errorMessage = null
         textChunks = listOf()
         totalExtractedChars = 0
-        
-        // 确保有 URI 访问权限
-        try {
-            val persistedUris = context.contentResolver.persistedUriPermissions
-            val hasPermission = persistedUris.any { it.uri == uri }
-            if (!hasPermission) {
-                try {
-                    context.contentResolver.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                } catch (e: SecurityException) {
-                    // 忽略
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        
-        try {
-            // 使用 TextContentManager 统一加载（自动处理缓存）
-            val textContentManager = TextContentManager(context)
-            val cacheManager = TextCacheManager(context)
-            val uriString = uri.toString()
-            
-            // 如果有缓存，先读取上次阅读进度
-            var lastPageNumber = 0
-            if (cacheManager.hasCache(uriString)) {
-                lastPageNumber = cacheManager.readReadingProgress(uriString)
-            }
-            
-            textContentManager.loadTextContent(uri, fileType, avgCharsPerLine, maxLinesPerPage)
-                .collectLatest { chunk ->
-                    textChunks = textChunks + chunk
-                    totalExtractedChars += chunk.content.length
-                    isLoading = false
-                    
-                    if (textChunks.size == 1) {
-                        lifecycleScope.launch {
-                            // 第一次加载完成，跳转到上次阅读的页面（如果有的话）
-                            val targetPage = lastPageNumber.coerceIn(0, textChunks.size - 1)
-                            if (targetPage > 0) {
-                                pagerState.scrollToPage(targetPage)
-                            } else {
-                                pagerState.scrollToPage(0)
-                            }
-                        }
-                    }
-                }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            errorMessage = "加载失败：${e.message}"
-            isLoading = false
-        }
     }
     
     Scaffold(
@@ -230,32 +189,6 @@ fun ContentScreen(
             )
         }
     ) { innerPadding ->
-        // 精确计算可用高度和宽度（排除顶部 AppBar、底部和左右 padding）
-        val topPadding = innerPadding.calculateTopPadding().value * density.density
-        val bottomPadding = innerPadding.calculateBottomPadding().value * density.density
-        val horizontalPadding = 16.dp.value * 2 * density.density
-        
-        val screenHeightPx = context.resources.displayMetrics.heightPixels.toFloat()
-        val screenWidthPx = context.resources.displayMetrics.widthPixels.toFloat()
-        
-        val availableHeight = screenHeightPx - topPadding - bottomPadding
-        val availableWidth = screenWidthPx - horizontalPadding
-        
-        // 如果还没初始化参数，现在计算
-        if (!isParamsInitialized) {
-            // 1. 计算每行平均字符数（左右留安全距离）
-            val fontSizePx = with(density) { defaultFontSize.toPx() }
-            val charAspectRatio = 1.0f // 汉字宽高比约 1:1
-            val avgCharWidth = fontSizePx * charAspectRatio * 1.1f // 考虑字间距，增加 10%
-            avgCharsPerLine = (availableWidth / avgCharWidth).toInt()
-            
-            // 2. 计算每页最大行数（上下留安全距离，已排除标题栏）
-            val scaledLineHeightPx = with(density) { scaledLineHeight.toPx() }
-            maxLinesPerPage = (availableHeight / scaledLineHeightPx).toInt().coerceIn(10, 35)
-            
-            isParamsInitialized = true
-        }
-        
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -343,6 +276,74 @@ fun ContentScreen(
             }
         )
     }
+}
+
+/**
+ * 页面布局参数数据类
+ */
+data class LayoutParameters(
+    val avgCharsPerLine: Int,
+    val maxLinesPerPage: Int
+)
+
+/**
+ * 计算并记住页面布局参数
+ * 使用屏幕尺寸和密度自动计算每行字符数和每页行数
+ * 
+ * @param context Context
+ * @param density Density
+ * @return LayoutParameters 包含 avgCharsPerLine 和 maxLinesPerPage
+ */
+@Composable
+private fun rememberLayoutParameters(
+    context: Context,
+    density: androidx.compose.ui.platform.Density
+): LayoutParameters {
+    // 使用 derivedStateOf 创建响应式计算结果
+    return remember(context) {
+        calculateLayoutParameters(context)
+    }
+}
+
+/**
+ * 计算页面布局参数的独立函数
+ * 可以在任何地方调用，无需 Compose 环境
+ * 
+ * @param context Context
+ * @return LayoutParameters 包含 avgCharsPerLine 和 maxLinesPerPage
+ */
+fun calculateLayoutParameters(context: Context): LayoutParameters {
+    val displayMetrics = context.resources.displayMetrics
+    val screenHeightPx = displayMetrics.heightPixels.toFloat()
+    val screenWidthPx = displayMetrics.widthPixels.toFloat()
+    
+    // 转换为像素
+    val fontSizePx = with(density) { DEFAULT_FONT_SIZE.sp.toPx() }
+    val baseLineHeightPx = with(density) { BASE_LINE_HEIGHT.sp.toPx() }
+    val scaledLineHeightPx = baseLineHeightPx * LINE_HEIGHT_SCALE
+    
+    // 计算左右 padding（16dp * 2）
+    val horizontalPaddingPx = with(density) { (16.dp * 2).toPx() }
+    
+    // 计算可用区域
+    val availableWidth = screenWidthPx - horizontalPaddingPx
+    
+    // 估算顶部 padding（AppBar 高度约 56dp + status bar）
+    val topPaddingPx = with(density) { (56.dp + 24.dp).toPx() }
+    val bottomPaddingPx = with(density) { 16.dp.toPx() }
+    val availableHeight = screenHeightPx - topPaddingPx - bottomPaddingPx
+    
+    // 1. 计算每行平均字符数
+    val avgCharWidth = fontSizePx * CHAR_ASPECT_RATIO * CHAR_SPACING_FACTOR
+    val avgCharsPerLine = (availableWidth / avgCharWidth).toInt()
+    
+    // 2. 计算每页最大行数（限制在合理范围内）
+    val maxLinesPerPage = (availableHeight / scaledLineHeightPx).toInt().coerceIn(10, 35)
+    
+    return LayoutParameters(
+        avgCharsPerLine = avgCharsPerLine,
+        maxLinesPerPage = maxLinesPerPage
+    )
 }
 
 @Composable
