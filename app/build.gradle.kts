@@ -49,16 +49,16 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation("androidx.datastore:datastore-preferences:1.0.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
     
     // Room Database
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-runtime:2.7.0-rc01")
+    implementation("androidx.room:room-ktx:2.7.0-rc01")
+    ksp("androidx.room:room-compiler:2.7.0-rc01")
     
-    // PDFBox for PDF files
-    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+    // PDFBox for PDF files - 使用 Maven Central 的版本
+    implementation("org.apache.pdfbox:pdfbox:2.0.32")
     
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
