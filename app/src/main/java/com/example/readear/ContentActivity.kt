@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 class ContentActivity : ComponentActivity() {
     
@@ -184,7 +185,7 @@ fun ContentScreen(
         }
     }
     
-    // 监听页面变化，预加载后续页面
+    // 监听页面变化，预加载后续页面（但不保存进度）
     LaunchedEffect(pagerState.currentPage) {
         if (textChunks.isNotEmpty()) {
             onPageChanged(pagerState.currentPage)
@@ -196,9 +197,21 @@ fun ContentScreen(
         }
     }
     
-    // 保存阅读进度（在 Activity 生命周期中调用）
+    // 在 Activity 销毁时保存阅读进度（只保存一次）
     DisposableEffect(Unit) {
+        // 定时保存：每 30 秒自动保存一次进度
+        val autoSaveJob = lifecycleScope.launch {
+            while (true) {
+                delay(30_000) // 30 秒
+                if (textChunks.isNotEmpty()) {
+                    textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
+                }
+            }
+        }
+        
         onDispose {
+            // 取消定时任务并立即保存一次
+            autoSaveJob.cancel()
             lifecycleScope.launch {
                 textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
             }
