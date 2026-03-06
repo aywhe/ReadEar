@@ -38,6 +38,17 @@ android {
     buildFeatures {
         compose = true
     }
+    
+    // 添加打包选项，排除重复的元数据文件
+    packaging {
+        resources {
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE"
+            excludes += "META-INF/LICENSE.txt"
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/NOTICE.txt"
+        }
+    }
 }
 
 dependencies {
@@ -59,7 +70,7 @@ dependencies {
     
     // PDFBox for PDF files - 使用 Maven Central 的版本
     implementation("org.apache.pdfbox:pdfbox:2.0.32")
-    
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
