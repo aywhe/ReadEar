@@ -29,7 +29,7 @@ class PagesCache(val uri: String) {
      * 获取上次阅读的页码
      * @return 返回上次阅读的页码
      */
-    fun getLastReadingPage(): Int {
+    fun getLastReadingPageNumber(): Int {
         return lastReadingPage
     }
     
@@ -37,7 +37,7 @@ class PagesCache(val uri: String) {
      * 设置上次阅读的页码
      * @param page 页码
      */
-    fun setLastReadingPage(page: Int) {
+    fun setLastReadingPageNumber(page: Int) {
         this.lastReadingPage = page
     }
     
@@ -73,18 +73,9 @@ class PagesCache(val uri: String) {
      * @param chunk 文本块
      */
     fun addPage(chunk: TextChunk) {
-        val pageNumber = pages.size
-        pages[pageNumber] = chunk
+        pages[chunk.index] = chunk
     }
-    
-    /**
-     * 批量添加页面
-     * @param chunks 文本块列表
-     */
-    fun addAllPages(chunks: Map<Int, TextChunk>) {
-        pages.clear()
-        pages.putAll(chunks)
-    }
+
     
     /**
      * 获取指定页的内容

@@ -24,14 +24,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.readear.ui.theme.ReadEarTheme
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import androidx.core.net.toUri
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
 class ContentActivity : ComponentActivity() {
@@ -153,26 +151,22 @@ fun ContentScreen(
     LaunchedEffect(uri, fileType) {
         try {
             // 1. 获取上次阅读位置
-            val lastReadPage = textManager.getLastReadPage(uri.toString())
+            val lastReadPage = textManager.getLastReadPageNumber(uri.toString())
             
-            // 2. 检查是否有缓存或数据库内容
-            val hasCache = textManager.hasCache(uri.toString())
-            val cacheManager = CacheManager(context)
-            val hasDbContent = cacheManager.hasPagesCache(uri.toString())
-            
-            hasContent = hasCache || hasDbContent
+            // 2. 检查是否有缓存内容
+            val hasCache = textManager.hasBook(uri.toString())
+
+            hasContent = hasCache
             
             if (hasContent) {
                 // 如果有内容，获取总页数
-                totalPages = if (hasCache) {
-                    textManager.getCachedPagesCount(uri.toString()) ?: 0
-                } else {
-                    cacheManager.getTotalPagesCount(uri.toString())
-                }
+                totalPages = textManager.getPagesCount(uri.toString()) ?: 0
                 
-                // 恢复到上次阅读位置
-                if (lastReadPage > 0 && lastReadPage < totalPages) {
-                    pagerState.scrollToPage(lastReadPage)
+                // 恢复到上次阅读位置（确保页码有效）
+                lastReadPage?.let { page ->
+                    if (page > 0 && page < totalPages) {
+                        pagerState.scrollToPage(page)
+                    }
                 }
             } else {
                 // TODO: 没有缓存和数据库内容，需要提取文本
@@ -187,15 +181,10 @@ fun ContentScreen(
     LaunchedEffect(pagerState.currentPage) {
         if (hasContent) {
             onPageChanged(pagerState.currentPage)
-            
-            // 1. 立即加载当前页面
-            lifecycleScope.launch {
-                textManager.loadPage(uri.toString(), pagerState.currentPage)
-            }
-            
+
             // 2. 预加载后续 5 页
             lifecycleScope.launch {
-                textManager.preloadPagesRange(uri.toString(), pagerState.currentPage + 1, pagerState.currentPage + 5)
+                textManager.preloadPagesRange(uri.toString(), pagerState.currentPage, pagerState.currentPage + 5)
             }
             
             // 3. 预加载前几页（防止用户往回翻）
@@ -315,7 +304,7 @@ fun ContentScreen(
                         modifier = Modifier.fillMaxSize(),
                         beyondViewportPageCount = Int.MAX_VALUE
                     ) { page ->
-                        val chunk = textManager.loadPageSync(uri.toString(), page)
+                        val chunk = textManager.getPageSync(uri.toString(), page)
                             ?: TextChunk("", false, page)
                         PageContent(chunk = chunk)
                     }

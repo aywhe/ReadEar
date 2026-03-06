@@ -22,13 +22,23 @@ object BooksCache {
     }
 
     /**
-     * 添加或更新缓存
+     * 检查是否有缓存
      * @param uri 文件 URI
+     * @return 如果有缓存返回 true
      */
     fun hasCache(uri: String): Boolean {
         return cacheMap.containsKey(uri)
     }
-
+    
+    /**
+     * 获取缓存的页面数量
+     * @param uri 文件 URI
+     * @return 返回页面数量，如果不存在返回 null
+     */
+    fun getPagesCount(uri: String): Int? {
+        return cacheMap[uri]?.totalPages
+    }
+    
     /**
      * 设置缓存
      * @param uri 文件 URI
@@ -51,4 +61,5 @@ object BooksCache {
     fun clearAllCache() {
         cacheMap.clear()
     }
+
 }
