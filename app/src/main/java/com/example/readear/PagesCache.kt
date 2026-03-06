@@ -24,6 +24,22 @@ class PagesCache(val uri: String) {
     private var lastReadingPage: Int = 0
     
     /**
+     * 获取上次阅读的页码
+     * @return 返回上次阅读的页码
+     */
+    fun getLastReadingPage(): Int {
+        return lastReadingPage
+    }
+    
+    /**
+     * 设置上次阅读的页码
+     * @param page 页码
+     */
+    fun setLastReadingPage(page: Int) {
+        this.lastReadingPage = page
+    }
+    
+    /**
      * 是否已完整保存（整本书是否已全部缓存）
      */
     private var isCompleted: Boolean = false

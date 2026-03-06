@@ -30,6 +30,15 @@ object BooksCache {
     }
 
     /**
+     * 设置缓存
+     * @param uri 文件 URI
+     * @param pagesCache 页面缓存对象
+     */
+    fun setCache(uri: String, pagesCache: PagesCache) {
+        cacheMap[uri] = pagesCache
+    }
+
+    /**
      * 清除指定 URI 的缓存
      */
     fun clearCache(uri: String) {
