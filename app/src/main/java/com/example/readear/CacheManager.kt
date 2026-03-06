@@ -117,6 +117,15 @@ class CacheManager(private val context: Context) {
         pages.isNotEmpty()
     }
     
+    /**
+     * 获取总页数
+     * @param bookId 书籍 ID
+     * @return 返回总页数
+     */
+    suspend fun getTotalPagesCount(bookId: String): Int = withContext(Dispatchers.IO) {
+        dao.getTotalPagesCount(bookId)
+    }
+    
     // ==================== 阅读进度操作 ====================
     
     /**

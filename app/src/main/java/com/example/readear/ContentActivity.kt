@@ -164,12 +164,11 @@ fun ContentScreen(
             
             if (hasContent) {
                 // 如果有内容，获取总页数
-                val allPages = if (hasCache) {
-                    textManager.getCachedPages(uri.toString())?.size ?: 0
+                totalPages = if (hasCache) {
+                    textManager.getCachedPagesCount(uri.toString()) ?: 0
                 } else {
-                    cacheManager.getAllPages(uri.toString()).size
+                    cacheManager.getTotalPagesCount(uri.toString())
                 }
-                totalPages = allPages
                 
                 // 恢复到上次阅读位置
                 if (lastReadPage > 0 && lastReadPage < totalPages) {
@@ -189,21 +188,22 @@ fun ContentScreen(
         if (hasContent) {
             onPageChanged(pagerState.currentPage)
             
-            // 1. 确保当前页面已加载（如果在缓存中但没有被访问过）
-            val currentPage = pagerState.currentPage
-            val currentChunk = textManager.loadPage(uri.toString(), currentPage)
+            // 1. 立即加载当前页面
+            lifecycleScope.launch {
+                textManager.loadPage(uri.toString(), pagerState.currentPage)
+            }
             
             // 2. 预加载后续 5 页
             lifecycleScope.launch {
-                textManager.preloadPagesRange(uri.toString(), currentPage + 1, currentPage + 5)
+                textManager.preloadPagesRange(uri.toString(), pagerState.currentPage + 1, pagerState.currentPage + 5)
             }
             
             // 3. 预加载前几页（防止用户往回翻）
             lifecycleScope.launch {
-                if (currentPage > 5) {
-                    textManager.preloadPagesRange(uri.toString(), currentPage - 5, currentPage - 1)
+                if (pagerState.currentPage > 5) {
+                    textManager.preloadPagesRange(uri.toString(), pagerState.currentPage - 5, pagerState.currentPage - 1)
                 } else {
-                    textManager.preloadPagesRange(uri.toString(), 0, currentPage - 1)
+                    textManager.preloadPagesRange(uri.toString(), 0, pagerState.currentPage - 1)
                 }
             }
         }
@@ -315,8 +315,7 @@ fun ContentScreen(
                         modifier = Modifier.fillMaxSize(),
                         beyondViewportPageCount = Int.MAX_VALUE
                     ) { page ->
-                        val pagesCache = textManager.getCachedPages(uri.toString())
-                        val chunk = pagesCache?.get(page)
+                        val chunk = textManager.loadPageSync(uri.toString(), page)
                             ?: TextChunk("", false, page)
                         PageContent(chunk = chunk)
                     }

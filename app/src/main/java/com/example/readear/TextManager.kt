@@ -31,8 +31,17 @@ class TextManager(private val context: Context) {
     /**
      * 获取缓存的页面内容
      */
-    fun getCachedPages(uri: String): Map<Int, TextChunk>?{
+    private fun getCachedPages(uri: String): Map<Int, TextChunk>?{
         return pagesCacheManager.getCache(uri)?.getAllPages()
+    }
+    
+    /**
+     * 获取缓存的页面数量
+     */
+    suspend fun getCachedPagesCount(uri: String): Int? {
+        return withContext(Dispatchers.IO) {
+            pagesCacheManager.getCache(uri)?.getAllPages()?.size
+        }
     }
     
     /**
@@ -131,6 +140,22 @@ class TextManager(private val context: Context) {
             // 3. 数据库也没有，返回 null（需要后续提取）
             null
         }
+    }
+    
+    /**
+     * 同步加载单个页面内容（用于 Compose UI）
+     * @param uri 文件 URI
+     * @param pageNumber 页码（从 0 开始）
+     * @return 返回该页的文本块，如果不存在返回空文本块
+     */
+    fun loadPageSync(uri: String, pageNumber: Int): TextChunk? {
+        val cachedPage = pagesCacheManager.getCache(uri)?.getPage(pageNumber)
+        if (cachedPage != null) {
+            return cachedPage
+        }
+        
+        // 如果缓存中没有，返回 null（会在后台异步加载）
+        return null
     }
     
     /**
