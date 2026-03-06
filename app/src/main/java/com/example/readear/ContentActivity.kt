@@ -39,13 +39,6 @@ class ContentActivity : ComponentActivity() {
         const val EXTRA_FILE_URI = "extra_file_uri"
         const val EXTRA_FILE_NAME = "extra_file_name"
         const val EXTRA_FILE_TYPE = "extra_file_type"
-        
-        // 页面布局参数的默认值（基于标准字体大小和行高）
-        private const val DEFAULT_FONT_SIZE = 16f // sp
-        private const val BASE_LINE_HEIGHT = 24f // sp
-        private const val LINE_HEIGHT_SCALE = 1.5f // 行距倍数
-        private const val CHAR_ASPECT_RATIO = 1.0f // 汉字宽高比
-        private const val CHAR_SPACING_FACTOR = 1.1f // 字间距系数
     }
     
     // 当前阅读页码
@@ -145,8 +138,12 @@ fun ContentScreen(
     // 控制跳转对话框的显示
     var showJumpDialog by remember { mutableStateOf(false) }
     
-    // 计算页面布局参数
-    val layoutParams = rememberLayoutParameters(context, density)
+    // 计算页面布局参数（使用 derivedStateOf 避免重复计算）
+    val layoutParams by remember(context) {
+        derivedStateOf {
+            calculateLayoutParameters(context)
+        }
+    }
     
     // 启动文本加载（后台自动判断是否使用缓存）
     LaunchedEffect(uri, fileType) {
@@ -297,7 +294,7 @@ data class LayoutParameters(
 @Composable
 private fun rememberLayoutParameters(
     context: Context,
-    density: androidx.compose.ui.platform.Density
+    density: androidx.compose.ui.unit.Density
 ): LayoutParameters {
     // 使用 derivedStateOf 创建响应式计算结果
     return remember(context) {
@@ -313,28 +310,35 @@ private fun rememberLayoutParameters(
  * @return LayoutParameters 包含 avgCharsPerLine 和 maxLinesPerPage
  */
 fun calculateLayoutParameters(context: Context): LayoutParameters {
+    // 页面布局参数的默认值（基于标准字体大小和行高）
+    val defaultFontSize = 16f // sp
+    val baseLineHeight = 24f // sp
+    val lineHeightScale = 1.5f // 行距倍数
+    val charAspectRatio = 1.0f // 汉字宽高比
+    val charSpacingFactor = 1.1f // 字间距系数
+    
     val displayMetrics = context.resources.displayMetrics
     val screenHeightPx = displayMetrics.heightPixels.toFloat()
     val screenWidthPx = displayMetrics.widthPixels.toFloat()
     
-    // 转换为像素
-    val fontSizePx = with(density) { DEFAULT_FONT_SIZE.sp.toPx() }
-    val baseLineHeightPx = with(density) { BASE_LINE_HEIGHT.sp.toPx() }
-    val scaledLineHeightPx = baseLineHeightPx * LINE_HEIGHT_SCALE
+    // 转换为像素（使用 displayMetrics 而不是 density）
+    val fontSizePx = defaultFontSize * displayMetrics.density
+    val baseLineHeightPx = baseLineHeight * displayMetrics.density
+    val scaledLineHeightPx = baseLineHeightPx * lineHeightScale
     
     // 计算左右 padding（16dp * 2）
-    val horizontalPaddingPx = with(density) { (16.dp * 2).toPx() }
+    val horizontalPaddingPx = 16f * displayMetrics.density * 2
     
     // 计算可用区域
     val availableWidth = screenWidthPx - horizontalPaddingPx
     
     // 估算顶部 padding（AppBar 高度约 56dp + status bar）
-    val topPaddingPx = with(density) { (56.dp + 24.dp).toPx() }
-    val bottomPaddingPx = with(density) { 16.dp.toPx() }
+    val topPaddingPx = (56f + 24f) * displayMetrics.density
+    val bottomPaddingPx = 16f * displayMetrics.density
     val availableHeight = screenHeightPx - topPaddingPx - bottomPaddingPx
     
     // 1. 计算每行平均字符数
-    val avgCharWidth = fontSizePx * CHAR_ASPECT_RATIO * CHAR_SPACING_FACTOR
+    val avgCharWidth = fontSizePx * charAspectRatio * charSpacingFactor
     val avgCharsPerLine = (availableWidth / avgCharWidth).toInt()
     
     // 2. 计算每页最大行数（限制在合理范围内）
@@ -370,7 +374,7 @@ fun PageContent(chunk: TextChunk) {
 }
 
 @Composable
-fun JumpToPageDialog(
+private fun JumpToPageDialog(
     currentPage: Int,
     totalPages: Int,
     onDismiss: () -> Unit,
