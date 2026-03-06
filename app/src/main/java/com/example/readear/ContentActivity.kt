@@ -317,7 +317,7 @@ fun ContentScreen(
                     ) { page ->
                         val pagesCache = textManager.getCachedPages(uri.toString())
                         val chunk = pagesCache?.get(page)
-                            ?: TextChunk("", "加载中...", false, page)
+                            ?: TextChunk("", false, page)
                         PageContent(chunk = chunk)
                     }
                 }

@@ -333,6 +333,7 @@ private fun formatFileSize(size: Long): String {
 @Composable
 fun FileListItem(file: FileItem, onDelete: suspend () -> Unit, onClick: () -> Unit = {}) {
     var showDeleteDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     
     Card(
         modifier = Modifier
@@ -389,7 +390,9 @@ fun FileListItem(file: FileItem, onDelete: suspend () -> Unit, onClick: () -> Un
             confirmButton = {
                 Button(
                     onClick = {
-                        onDelete()
+                        scope.launch {
+                            onDelete()
+                        }
                         showDeleteDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(

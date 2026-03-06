@@ -82,7 +82,7 @@ class TextManager(private val context: Context) {
                  val pages = cacheManager.getAllPages(bookId)
                  // 同步到缓存
                  val textChunksMap = pages.associate { page ->
-                     page.pageNumber to TextChunk(page.content, page.chapterTitle, false, page.chapterIndex)
+                     page.pageNumber to TextChunk(page.content, false, page.index)
                  }
                  // 添加到缓存
                  val pagesCache = PagesCache(uri)
@@ -116,9 +116,8 @@ class TextManager(private val context: Context) {
             val page = cacheManager.getPage(uri, pageNumber)
             
             if (page != null) {
-                val textChunk = TextChunk(page.content, page.chapterTitle, false, page.chapterIndex)
+                val textChunk = TextChunk(page.content, false, page.index)
                 
-                // 同步到缓存
                 var pagesCache = pagesCacheManager.getCache(uri)
                 if (pagesCache == null) {
                     pagesCache = PagesCache(uri)
@@ -153,7 +152,7 @@ class TextManager(private val context: Context) {
                     val page = cacheManager.getPage(uri, pageNumber)
                     
                     if (page != null) {
-                        val textChunk = TextChunk(page.content, page.chapterTitle, false, page.chapterIndex)
+                        val textChunk = TextChunk(page.content, false,page.index)
                         
                         var pagesCache = pagesCacheManager.getCache(uri)
                         if (pagesCache == null) {
@@ -237,7 +236,7 @@ class TextManager(private val context: Context) {
         avgCharsPerLine: Int,
         maxLinesPerPage: Int
     ): Flow<TextChunk> = flow {
-        var chapterIndex = 0
+        var index = 0
         var currentContent = StringBuilder()
         var currentLines = 0
 
@@ -260,13 +259,12 @@ class TextManager(private val context: Context) {
                         emit(
                             TextChunk(
                                 content = currentContent.toString(),
-                                chapterTitle = (chapterIndex + 1).toString(),
                                 isComplete = false,
-                                chapterIndex = chapterIndex + 1
+                                index = index + 1
                             )
                         )
                         currentContent.clear()
-                        chapterIndex++
+                        index++
                         currentLines = 0
                     }
 
@@ -279,12 +277,11 @@ class TextManager(private val context: Context) {
                         emit(
                             TextChunk(
                                 content = pageText + "\n",
-                                chapterTitle = (chapterIndex + 1).toString(),
                                 isComplete = false,
-                                chapterIndex = chapterIndex + 1
+                                index = index + 1
                             )
                         )
-                        chapterIndex++
+                        index++
                         remainingText = remainingText.substring(charsForFullPage)
                     }
 
@@ -300,13 +297,12 @@ class TextManager(private val context: Context) {
                     emit(
                         TextChunk(
                             content = currentContent.toString(),
-                            chapterTitle = (chapterIndex + 1).toString(),
                             isComplete = false,
-                            chapterIndex = chapterIndex + 1
+                            index = index + 1
                         )
                     )
                     currentContent.clear()
-                    chapterIndex++
+                    index++
                     currentLines = 0
 
                     // 现在处理这一行，检查是否能完整放入新的一页
@@ -324,12 +320,11 @@ class TextManager(private val context: Context) {
                             emit(
                                 TextChunk(
                                     content = pageText + "\n",
-                                    chapterTitle = (chapterIndex + 1).toString(),
                                     isComplete = false,
-                                    chapterIndex = chapterIndex + 1
+                                    index = index + 1
                                 )
                             )
-                            chapterIndex++
+                            index++
                             remainingText = remainingText.substring(charsForFullPage)
                         }
 
@@ -355,13 +350,12 @@ class TextManager(private val context: Context) {
                         emit(
                             TextChunk(
                                 content = currentContent.toString(),
-                                chapterTitle = (chapterIndex + 1).toString(),
                                 isComplete = false,
-                                chapterIndex = chapterIndex + 1
+                                index = index + 1
                             )
                         )
                         currentContent.clear()
-                        chapterIndex++
+                        index++
                         currentLines = 0
 
                         // 处理剩余部分
@@ -379,12 +373,11 @@ class TextManager(private val context: Context) {
                                     emit(
                                         TextChunk(
                                             content = pageText + "\n",
-                                            chapterTitle = (chapterIndex + 1).toString(),
                                             isComplete = false,
-                                            chapterIndex = chapterIndex + 1
+                                            index = index + 1
                                         )
                                     )
-                                    chapterIndex++
+                                    index++
                                     textToSplit = textToSplit.substring(charsForFullPage)
                                 }
 
@@ -413,9 +406,8 @@ class TextManager(private val context: Context) {
             emit(
                 TextChunk(
                     content = currentContent.toString(),
-                    chapterTitle = if (chapterIndex > 0) (chapterIndex + 1).toString() else "1",
                     isComplete = true,
-                    chapterIndex = chapterIndex + 1
+                    index = if (index > 0) index + 1 else 1
                 )
             )
         }

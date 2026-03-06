@@ -19,13 +19,11 @@ interface TextExtractor {
 /**
  * 文本块数据类
  * @param content 文本内容
- * @param chapterTitle 章节标题
  * @param isComplete 是否是最后一个块
- * @param chapterIndex 章节索引
+ * @param index 章节索引
  */
 data class TextChunk(
     val content: String,
-    val chapterTitle: String,
     val isComplete: Boolean = false,
-    val chapterIndex: Int = 0
+    val index: Int = 0
 )
