@@ -103,7 +103,7 @@ class MainActivity : ComponentActivity() {
                             onDeleteFile = { file ->
                                 deleteFileFromList(file)
                                 // 清除对应的缓存
-                                CacheManager(applicationContext).clearCache(file.fileUri)
+                                CacheManager(applicationContext).deleteBook(file.fileUri)
                                 FileRepository(applicationContext).saveFileList(fileList)
                             },
                             onFileClick = { file ->

@@ -125,6 +125,7 @@ fun ContentScreen(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
+    val lifecycleScope = rememberCoroutineScope()
     
     // 状态管理
     var textChunks by remember { mutableStateOf(listOf<TextChunk>()) }
@@ -132,7 +133,6 @@ fun ContentScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var totalExtractedChars by remember { mutableStateOf(0) }
     
-    val lifecycleScope = rememberCoroutineScope()
     val pagerState = rememberPagerState(pageCount = { textChunks.size })
     
     // 控制跳转对话框的显示
@@ -145,12 +145,64 @@ fun ContentScreen(
         }
     }
     
+    // TextManager 实例
+    val textManager = remember(context) { TextManager(context) }
+    
     // 启动文本加载（后台自动判断是否使用缓存）
     LaunchedEffect(uri, fileType) {
         isLoading = true
         errorMessage = null
-        textChunks = listOf()
-        totalExtractedChars = 0
+        
+        try {
+            // 1. 尝试加载内容（后台异步）
+            when (val result = textManager.loadBookContent(uri.toString(), fileName, fileType)) {
+                is TextManager.LoadResult.Success -> {
+                    textChunks = result.pages
+                    totalExtractedChars = result.pages.sumOf { it.content.length }
+                    
+                    // 2. 恢复上次阅读位置
+                    val lastReadPage = textManager.getLastReadPage(uri.toString())
+                    if (lastReadPage > 0 && lastReadPage < result.pages.size) {
+                        pagerState.scrollToPage(lastReadPage)
+                    }
+                    
+                    isLoading = false
+                }
+                is TextManager.LoadResult.NotExist -> {
+                    // TODO: 数据库和缓存都没有，需要提取文本
+                    errorMessage = "文件内容尚未提取，请稍后再试"
+                    isLoading = false
+                }
+                is TextManager.LoadResult.Error -> {
+                    errorMessage = result.message
+                    isLoading = false
+                }
+            }
+        } catch (e: Exception) {
+            errorMessage = "加载失败：${e.message}"
+            isLoading = false
+        }
+    }
+    
+    // 监听页面变化，预加载后续页面
+    LaunchedEffect(pagerState.currentPage) {
+        if (textChunks.isNotEmpty()) {
+            onPageChanged(pagerState.currentPage)
+            
+            // 预加载后续 5 页
+            lifecycleScope.launch {
+                textManager.preloadNextPages(uri.toString(), pagerState.currentPage, 5)
+            }
+        }
+    }
+    
+    // 保存阅读进度（在 Activity 生命周期中调用）
+    DisposableEffect(Unit) {
+        onDispose {
+            lifecycleScope.launch {
+                textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
+            }
+        }
     }
     
     Scaffold(
