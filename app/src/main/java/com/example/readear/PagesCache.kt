@@ -1,5 +1,7 @@
 package com.example.readear
 
+import kotlin.collections.mutableMapOf
+
 /**
  * 文本页面缓存数据类
  * 
@@ -16,7 +18,7 @@ class PagesCache(val uri: String) {
     /**
      * 所有页面的列表（索引即页码，从 0 开始）
      */
-    private val pages = mutableMapOf<UInt, TextChunk>()
+    private val pages = mutableMapOf<Int, TextChunk>()
     
     /**
      * 上次阅读的页码
@@ -71,7 +73,7 @@ class PagesCache(val uri: String) {
      * @param chunk 文本块
      */
     fun addPage(chunk: TextChunk) {
-        val pageNumber = pages.size.toUInt()
+        val pageNumber = pages.size
         pages[pageNumber] = chunk
     }
     
@@ -79,12 +81,9 @@ class PagesCache(val uri: String) {
      * 批量添加页面
      * @param chunks 文本块列表
      */
-    fun addAllPages(chunks: List<TextChunk>) {
-        var startIndex = pages.size.toUInt()
-        chunks.forEach { chunk ->
-            pages[startIndex] = chunk
-            startIndex++
-        }
+    fun addAllPages(chunks: Map<Int, TextChunk>) {
+        pages.clear()
+        pages.putAll(chunks)
     }
     
     /**
@@ -93,15 +92,15 @@ class PagesCache(val uri: String) {
      * @return 返回该页的文本块，如果页码无效返回 null
      */
     fun getPage(pageNumber: Int): TextChunk? {
-        return pages[pageNumber.toUInt()]
+        return pages[pageNumber]
     }
     
     /**
      * 获取所有页面
      * @return 返回所有页面的列表（只读）
      */
-    fun getAllPages(): List<TextChunk> {
-        return pages.toSortedMap().values.toList()
+    fun getAllPages(): Map<Int, TextChunk> {
+        return pages
     }
     
     /**
@@ -110,7 +109,7 @@ class PagesCache(val uri: String) {
      * @return 如果页码在有效范围内返回 true
      */
     fun isValidPage(pageNumber: Int): Boolean {
-        return pages.containsKey(pageNumber.toUInt())
+        return pages.containsKey(pageNumber)
     }
     
     /**
@@ -120,7 +119,7 @@ class PagesCache(val uri: String) {
      */
     fun isLastPage(pageNumber: Int): Boolean {
         if (pages.isEmpty()) return false
-        return pageNumber.toUInt() == pages.keys.maxOrNull()!!
+        return pageNumber == pages.keys.maxOrNull()!!
     }
     
     /**

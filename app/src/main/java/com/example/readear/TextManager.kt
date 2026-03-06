@@ -31,7 +31,7 @@ class TextManager(private val context: Context) {
     /**
      * 获取缓存的页面内容
      */
-    fun getCachedPages(uri: String): List<TextChunk>? {
+    fun getCachedPages(uri: String): Map<Int, TextChunk>?{
         return pagesCacheManager.getCache(uri)?.getAllPages()
     }
     
@@ -64,7 +64,7 @@ class TextManager(private val context: Context) {
      * 优先从缓存获取，如果没有则从数据库加载
      * 如果数据库也没有，留给后续处理（TODO）
      */
-    suspend fun loadBookContent(uri: String, fileName: String, fileType: FileType): LoadResult {
+    suspend fun loadBookContent(uri: String): LoadResult {
         return withContext(Dispatchers.IO) {
             // 1. 检查缓存
             val cachedPages = getCachedPages(uri)
@@ -81,14 +81,14 @@ class TextManager(private val context: Context) {
              if (book != null) {
                  val pages = cacheManager.getAllPages(bookId)
                  // 同步到缓存
-                 val textChunks = pages.map { page ->
-                     TextChunk(page.content, page.chapterTitle, false, page.chapterIndex)
+                 val textChunksMap = pages.associate { page ->
+                     page.pageNumber to TextChunk(page.content, page.chapterTitle, false, page.chapterIndex)
                  }
                  // 添加到缓存
                  val pagesCache = PagesCache(uri)
-                 pagesCache.addAllPages(textChunks)
+                 pagesCache.addAllPages(textChunksMap)
                  pagesCacheManager.setCache(uri, pagesCache)
-                 return@withContext LoadResult.Success(textChunks)
+                 return@withContext LoadResult.Success(textChunksMap)
              }
             
             // 3. 数据库也没有，需要提取文本
@@ -97,6 +97,79 @@ class TextManager(private val context: Context) {
         }
     }
     
+    /**
+     * 加载单个页面内容
+     * @param uri 文件 URI
+     * @param pageNumber 页码（从 0 开始）
+     * @return 返回该页的文本块，如果不存在返回 null
+     */
+    suspend fun loadPage(uri: String, pageNumber: Int): TextChunk? {
+        return withContext(Dispatchers.IO) {
+            // 1. 先尝试从内存缓存获取
+            val cachedPage = pagesCacheManager.getCache(uri)?.getPage(pageNumber)
+            if (cachedPage != null) {
+                return@withContext cachedPage
+            }
+            
+            // 2. 从数据库加载
+            val cacheManager = CacheManager(context)
+            val page = cacheManager.getPage(uri, pageNumber)
+            
+            if (page != null) {
+                val textChunk = TextChunk(page.content, page.chapterTitle, false, page.chapterIndex)
+                
+                // 同步到缓存
+                var pagesCache = pagesCacheManager.getCache(uri)
+                if (pagesCache == null) {
+                    pagesCache = PagesCache(uri)
+                    pagesCacheManager.setCache(uri, pagesCache)
+                }
+                pagesCache.addPage(textChunk)
+                
+                return@withContext textChunk
+            }
+            
+            // 3. 数据库也没有，返回 null（需要后续提取）
+            null
+        }
+    }
+    
+    /**
+     * 预加载指定范围的页面
+     * @param uri 文件 URI
+     * @param startPage 起始页码
+     * @param endPage 结束页码
+     * @return 返回已加载的页面数量
+     */
+    suspend fun preloadPagesRange(uri: String, startPage: Int, endPage: Int): Int {
+        return withContext(Dispatchers.IO) {
+            var loadedCount = 0
+            
+            for (pageNumber in startPage..endPage) {
+                // 检查是否已在缓存中
+                if (pagesCacheManager.getCache(uri)?.getPage(pageNumber) == null) {
+                    // 不在缓存中，从数据库加载
+                    val cacheManager = CacheManager(context)
+                    val page = cacheManager.getPage(uri, pageNumber)
+                    
+                    if (page != null) {
+                        val textChunk = TextChunk(page.content, page.chapterTitle, false, page.chapterIndex)
+                        
+                        var pagesCache = pagesCacheManager.getCache(uri)
+                        if (pagesCache == null) {
+                            pagesCache = PagesCache(uri)
+                            pagesCacheManager.setCache(uri, pagesCache)
+                        }
+                        pagesCache.addPage(textChunk)
+                        loadedCount++
+                    }
+                }
+            }
+            
+            loadedCount
+        }
+    }
+
     /**
      * 保存阅读进度
      */
@@ -126,7 +199,7 @@ class TextManager(private val context: Context) {
      * 加载结果密封类
      */
     sealed class LoadResult {
-        data class Success(val pages: List<TextChunk>) : LoadResult()
+        data class Success(val pages: Map<Int, TextChunk>) : LoadResult()
         object NotExist : LoadResult()
         data class Error(val message: String) : LoadResult()
     }

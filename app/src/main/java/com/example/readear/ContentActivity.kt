@@ -128,18 +128,18 @@ fun ContentScreen(
     val density = LocalDensity.current
     val lifecycleScope = rememberCoroutineScope()
     
-    // 状态管理
-    var textChunks by remember { mutableStateOf(listOf<TextChunk>()) }
-    var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var totalExtractedChars by remember { mutableStateOf(0) }
+    var hasContent by remember { mutableStateOf(false) }
+    var totalPages by remember { mutableStateOf(0) }
+    var loadedPages by remember { mutableStateOf<Map<Int, TextChunk>>(emptyMap()) }
     
-    val pagerState = rememberPagerState(pageCount = { textChunks.size })
+    val pagerState = rememberPagerState(
+        initialPage = 0,
+        pageCount = { totalPages }
+    )
     
-    // 控制跳转对话框的显示
     var showJumpDialog by remember { mutableStateOf(false) }
     
-    // 计算页面布局参数（使用 derivedStateOf 避免重复计算）
     val layoutParams by remember(context) {
         derivedStateOf {
             calculateLayoutParameters(context)
@@ -149,61 +149,73 @@ fun ContentScreen(
     // TextManager 实例
     val textManager = remember(context) { TextManager(context) }
     
-    // 启动文本加载（后台自动判断是否使用缓存）
+    // 启动初始化：仅恢复上次阅读位置和检查是否有内容
     LaunchedEffect(uri, fileType) {
-        isLoading = true
-        errorMessage = null
-        
         try {
-            // 1. 尝试加载内容（后台异步）
-            when (val result = textManager.loadBookContent(uri.toString(), fileName, fileType)) {
-                is TextManager.LoadResult.Success -> {
-                    textChunks = result.pages
-                    totalExtractedChars = result.pages.sumOf { it.content.length }
-                    
-                    // 2. 恢复上次阅读位置
-                    val lastReadPage = textManager.getLastReadPage(uri.toString())
-                    if (lastReadPage > 0 && lastReadPage < result.pages.size) {
-                        pagerState.scrollToPage(lastReadPage)
-                    }
-                    
-                    isLoading = false
+            // 1. 获取上次阅读位置
+            val lastReadPage = textManager.getLastReadPage(uri.toString())
+            
+            // 2. 检查是否有缓存或数据库内容
+            val hasCache = textManager.hasCache(uri.toString())
+            val cacheManager = CacheManager(context)
+            val hasDbContent = cacheManager.hasPagesCache(uri.toString())
+            
+            hasContent = hasCache || hasDbContent
+            
+            if (hasContent) {
+                // 如果有内容，获取总页数
+                val allPages = if (hasCache) {
+                    textManager.getCachedPages(uri.toString())?.size ?: 0
+                } else {
+                    cacheManager.getAllPages(uri.toString()).size
                 }
-                is TextManager.LoadResult.NotExist -> {
-                    // TODO: 数据库和缓存都没有，需要提取文本
-                    errorMessage = "文件内容尚未提取，请稍后再试"
-                    isLoading = false
+                totalPages = allPages
+                
+                // 恢复到上次阅读位置
+                if (lastReadPage > 0 && lastReadPage < totalPages) {
+                    pagerState.scrollToPage(lastReadPage)
                 }
-                is TextManager.LoadResult.Error -> {
-                    errorMessage = result.message
-                    isLoading = false
-                }
+            } else {
+                // TODO: 没有缓存和数据库内容，需要提取文本
+                errorMessage = "文件内容尚未提取，请稍后再试"
             }
         } catch (e: Exception) {
             errorMessage = "加载失败：${e.message}"
-            isLoading = false
         }
     }
     
-    // 监听页面变化，预加载后续页面（但不保存进度）
+    // 监听页面变化，加载当前页面和预加载后续页面
     LaunchedEffect(pagerState.currentPage) {
-        if (textChunks.isNotEmpty()) {
+        if (hasContent) {
             onPageChanged(pagerState.currentPage)
             
-            // 预加载后续 5 页
+            // 1. 确保当前页面已加载（如果在缓存中但没有被访问过）
+            val currentPage = pagerState.currentPage
+            val currentChunk = textManager.loadPage(uri.toString(), currentPage)
+            
+            // 2. 预加载后续 5 页
             lifecycleScope.launch {
-                textManager.preloadNextPages(uri.toString(), pagerState.currentPage, 5)
+                textManager.preloadPagesRange(uri.toString(), currentPage + 1, currentPage + 5)
+            }
+            
+            // 3. 预加载前几页（防止用户往回翻）
+            lifecycleScope.launch {
+                if (currentPage > 5) {
+                    textManager.preloadPagesRange(uri.toString(), currentPage - 5, currentPage - 1)
+                } else {
+                    textManager.preloadPagesRange(uri.toString(), 0, currentPage - 1)
+                }
             }
         }
     }
-    
+
     // 在 Activity 销毁时保存阅读进度（只保存一次）
     DisposableEffect(Unit) {
         // 定时保存：每 30 秒自动保存一次进度
         val autoSaveJob = lifecycleScope.launch {
             while (true) {
                 delay(30_000) // 30 秒
-                if (textChunks.isNotEmpty()) {
+                if (hasContent) {
                     textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
                 }
             }
@@ -238,9 +250,9 @@ fun ContentScreen(
                     }
                 },
                 actions = {
-                    if (textChunks.isNotEmpty()) {
+                    if (hasContent && totalPages > 0) {
                         Text(
-                            text = "${pagerState.currentPage + 1}/${textChunks.size}",
+                            text = "${pagerState.currentPage + 1}/$totalPages",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier
                                 .padding(end = 16.dp)
@@ -257,7 +269,7 @@ fun ContentScreen(
                 .padding(innerPadding)
         ) {
             when {
-                isLoading && textChunks.isEmpty() -> {
+                !hasContent && errorMessage == null -> {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -288,7 +300,7 @@ fun ContentScreen(
                     }
                 }
                 
-                textChunks.isEmpty() -> {
+                !hasContent -> {
                     Text(
                         text = "文件中没有内容",
                         style = MaterialTheme.typography.bodyLarge,
@@ -298,27 +310,15 @@ fun ContentScreen(
                 }
                 
                 else -> {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        HorizontalPager(
-                            state = pagerState,
-                            modifier = Modifier.weight(1f),
-                            beyondViewportPageCount = textChunks.size
-                        ) { page ->
-                            PageContent(chunk = textChunks[page])
-                        }
-                        
-                        if (isLoading) {
-                            LinearProgressIndicator(
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                    
-                    // 监听页面变化，通知 Activity（由 Activity 在退出时保存）
-                    LaunchedEffect(pagerState.currentPage) {
-                        if (textChunks.isNotEmpty()) {
-                            onPageChanged(pagerState.currentPage)
-                        }
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize(),
+                        beyondViewportPageCount = Int.MAX_VALUE
+                    ) { page ->
+                        val pagesCache = textManager.getCachedPages(uri.toString())
+                        val chunk = pagesCache?.get(page)
+                            ?: TextChunk("", "加载中...", false, page)
+                        PageContent(chunk = chunk)
                     }
                 }
             }
@@ -328,7 +328,7 @@ fun ContentScreen(
     if (showJumpDialog) {
         JumpToPageDialog(
             currentPage = pagerState.currentPage + 1,
-            totalPages = textChunks.size,
+            totalPages = totalPages,
             onDismiss = { showJumpDialog = false },
             onConfirm = { targetPage ->
                 lifecycleScope.launch {
