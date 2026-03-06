@@ -102,8 +102,8 @@ class MainActivity : ComponentActivity() {
                             onAddFileClick = { openSystemFilePicker() },
                             onDeleteFile = { file ->
                                 deleteFileFromList(file)
-                                // 清除对应的缓存
-                                CacheManager(applicationContext).deleteBook(file.fileUri)
+                                // 清除对应的缓存和数据库数据
+                                clearBookData(file.fileUri)
                                 FileRepository(applicationContext).saveFileList(fileList)
                             },
                             onFileClick = { file ->
@@ -126,7 +126,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openSystemFilePicker() {
-        //val mimeTypes = arrayOf("*/*")
         // 只允许选择 TXT、Word、PDF 文件
         val mimeTypes = arrayOf(
             "text/plain",                                    // TXT 文件
@@ -153,6 +152,24 @@ class MainActivity : ComponentActivity() {
 
     private fun deleteFileFromList(file: FileItem) {
         fileList = fileList.filter { it.fileUri != file.fileUri }
+    }
+
+    /**
+     * 清除书籍的内存缓存和数据库数据（后台异步执行）
+     */
+    private fun clearBookData(fileUri: String) {
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                // 1. 清除内存缓存
+                BooksCache.clearCache(fileUri)
+                
+                // 2. 清除数据库数据
+                val cacheManager = CacheManager(applicationContext)
+                cacheManager.deleteBook(fileUri)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     private fun restoreFileList() {
@@ -257,7 +274,7 @@ fun FileListScreen(
     onDeleteFile: (FileItem) -> Unit = {},
     onFileClick: (FileItem) -> Unit = {}
 ) {
-    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
@@ -291,7 +308,11 @@ fun FileListScreen(
                 items(files) { file ->
                     FileListItem(
                         file = file,
-                        onDelete = { onDeleteFile(file) },
+                        onDelete = { 
+                            scope.launch {
+                                onDeleteFile(file)
+                            }
+                        },
                         onClick = { onFileClick(file) }
                     )
                 }
@@ -310,7 +331,7 @@ private fun formatFileSize(size: Long): String {
 }
 
 @Composable
-fun FileListItem(file: FileItem, onDelete: () -> Unit, onClick: () -> Unit = {}) {
+fun FileListItem(file: FileItem, onDelete: suspend () -> Unit, onClick: () -> Unit = {}) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     
     Card(
