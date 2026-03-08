@@ -6,13 +6,15 @@ import android.net.Uri
 /**
  * 文本提取器工厂
  * 根据文件类型创建对应的提取器
+ * 
+ * @param context Context
  */
-object TextExtractorFactory {
+class TextExtractorFactory(private val context: Context) {
     
     /**
      * 根据文件类型获取对应的文本提取器
      */
-    fun getExtractor(context: Context, fileType: FileType): TextExtractor {
+    fun getExtractor(fileType: FileType): TextExtractor {
         return when (fileType) {
             FileType.TXT -> TxtExtractor(context)
             FileType.WORD -> WordExtractor(context)

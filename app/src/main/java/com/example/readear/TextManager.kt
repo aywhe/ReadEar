@@ -4,109 +4,98 @@ import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
+import android.util.Log
 
 /**
- * 文本管理器
+ * 文本管理器（重构版本）
  * 
  * 职责：
- * - 管理书籍页面内容的加载和缓存
- * - 优先从 PagesCache 获取
- * - 提供异步加载接口，避免 UI 卡顿
+ * - 协调 TextLoader、CacheCoordinator 完成文本加载和缓存管理
+ * - 提供简洁的外部接口
+ * 
+ * 架构改进：
+ * 1. 职责分离：TextLoader 负责提取和分页，CacheCoordinator 负责缓存管理
+ * 2. 依赖注入：通过构造函数注入依赖，便于测试
+ * 3. 错误处理：关键操作添加异常捕获和日志记录
+ * 4. 性能优化：批量查询替代循环查询
+ * 
+ * @param context Context
  */
 class TextManager(private val context: Context) {
     
-    private val pagesCacheManager: BooksCache = BooksCache
+    private val booksCache: BooksCache = BooksCache
+    private val textExtractorFactory: TextExtractorFactory = TextExtractorFactory(context)
+    private val textLoader: TextLoader = TextLoader(textExtractorFactory)
+    private val cacheCoordinator: CacheCoordinator = CacheCoordinator(context, booksCache)
+    
+    companion object {
+        private const val TAG = "TextManager"
+    }
     
     /**
      * 检查指定 URI 的书籍是否有缓存
      */
-    fun hasBook(uri: String): Boolean {
-        return pagesCacheManager.hasCache(uri)
-    }
-    
-    /**
-     * 获取缓存的页面内容
-     */
-    private fun getAllPages(uri: String): Map<Int, TextChunk>?{
-        return pagesCacheManager.getCache(uri)?.getAllPages()
+    suspend fun hasBook(uri: String): Boolean {
+        return cacheCoordinator.hasCache(uri)
     }
     
     /**
      * 获取缓存的页面数量
      */
     suspend fun getPagesCount(uri: String): Int? {
-        return withContext(Dispatchers.Default) {
-            pagesCacheManager.getPagesCount(uri)
-        }
+        return cacheCoordinator.getPagesCount(uri)
     }
     
     /**
      * 获取上次阅读的页码（仅从内存缓存）
      */
     suspend fun getLastReadPageNumber(uri: String): Int? {
-        return withContext(Dispatchers.Default) {
-            // 先尝试从内存缓存获取
-            var lastPage = pagesCacheManager.getCache(uri)?.getLastReadingPageNumber()
-            if (lastPage != null) {
-                return@withContext lastPage
-            } else {
-                // 内存缓存没有，再尝试从数据库获取
-                val cacheManager = CacheManager(context)
-                lastPage = cacheManager.loadReadingProgress(uri)
-                if (lastPage != null) {
-                    pagesCacheManager.getCache(uri)?.setLastReadingPageNumber(lastPage)
-                }
-                return@withContext lastPage                
-            }
+        return try {
+            cacheCoordinator.getLastReadPageNumber(uri)
+        } catch (e: Exception) {
+            Log.e(TAG, "获取阅读进度失败：${e.message}", e)
+            null
         }
     }
 
     /**
-     * 加载单个页面内容（仅从内存缓存）
+     * 获取缓存的页面内容
      * @param uri 文件 URI
      * @param pageNumber 页码（从 0 开始）
      * @return 返回该页的文本块，如果不存在返回 null
      */
     suspend fun getPage(uri: String, pageNumber: Int): TextChunk? {
         return withContext(Dispatchers.Default) {
-            pagesCacheManager.getCache(uri)?.getPage(pageNumber)
+            try {
+                booksCache.getCache(uri)?.getPage(pageNumber)
+            } catch (e: Exception) {
+                Log.e(TAG, "获取页面失败：$pageNumber, ${e.message}", e)
+                null
+            }
         }
     }
 
     /**
-     * 预加载指定范围的页面到内存缓存
+     * 预加载指定范围的页面到内存缓存（批量查询优化）
+     * 
      * @param uri 文件 URI
      * @param startPage 起始页码
      * @param endPage 结束页码
-     * @return 返回成功从数据库加载到内存的页面数量
+     * @return 返回成功加载的页面数量
      */
     suspend fun preloadPagesRange(uri: String, startPage: Int, endPage: Int): Int {
         return withContext(Dispatchers.Default) {
-            var loadedCount = 0
-            val cacheManager = CacheManager(context)  // ← 移到循环外
-            val realEndPage = minOf(endPage, cacheManager.getMaxPageIndex(uri) ?: endPage)  // 确保不超过实际最大页码
-            for (pageNumber in startPage..realEndPage) {
-                // 检查是否已在内存缓存中
-                if (pagesCacheManager.getCache(uri)?.getPage(pageNumber) == null) {
-                    // 不在内存缓存中，从数据库加载
-                    val page = cacheManager.getPage(uri, pageNumber)
-                    
-                    if (page != null) {
-                        val textChunk = TextChunk(page.content, page.isCompleted, page.pageNumber)
-                        // 加载到内存缓存
-                        if(!pagesCacheManager.hasCache(uri)) {
-                            // 如果内存缓存不存在，先创建一个新的缓存对象
-                            pagesCacheManager.setCache(uri, PagesCache(uri))
-                        }
-                        pagesCacheManager.getCache(uri)?.addPage(textChunk)
-                        loadedCount++
-                    }
+            try {
+                if (startPage > endPage) {
+                    return@withContext 0
                 }
+                
+                cacheCoordinator.loadPagesToMemory(uri, startPage, endPage)
+            } catch (e: Exception) {
+                Log.e(TAG, "预加载页面失败：$startPage-$endPage, ${e.message}", e)
+                0
             }
-            
-            loadedCount
         }
     }
     
@@ -114,52 +103,49 @@ class TextManager(private val context: Context) {
      * 同步加载单个页面内容（用于 Compose UI）
      * @param uri 文件 URI
      * @param pageNumber 页码（从 0 开始）
-     * @return 返回该页的文本块，如果不存在返回空文本块
+     * @return 返回该页的文本块，如果不存在返回 null
      */
-    fun getPageSync(uri: String, pageNumber: Int): TextChunk? {
-        return pagesCacheManager.getCache(uri)?.getPage(pageNumber)
+    fun getPageFromMemory(uri: String, pageNumber: Int): TextChunk? {
+        return try {
+            booksCache.getCache(uri)?.getPage(pageNumber)
+        } catch (e: Exception) {
+            Log.e(TAG, "同步获取页面失败：$pageNumber, ${e.message}", e)
+            null
+        }
     }
 
     
     /**
-     * 保存阅读进度（仅内存）
+     * 保存阅读进度（两级缓存）
      */
     suspend fun saveReadingProgress(uri: String, currentPage: Int) {
-        withContext(Dispatchers.Default) {
-            pagesCacheManager.getCache(uri)?.setLastReadingPageNumber(currentPage)
+        try {
+            cacheCoordinator.saveReadingProgress(uri, currentPage)
+        } catch (e: Exception) {
+            Log.e(TAG, "保存阅读进度失败：$currentPage, ${e.message}", e)
         }
-        // 保存到缓存
-        val cacheManager = CacheManager(context)
-        cacheManager.saveReadingProgress(uri, currentPage)
     }
     
     /**
      * 清除指定书籍的缓存
      */
     suspend fun delBook(uri: String) {
-        pagesCacheManager.clearCache(uri)
-        val cacheManager = CacheManager(context)
-        cacheManager.deleteBook(uri)
+        try {
+            cacheCoordinator.clearCache(uri)
+        } catch (e: Exception) {
+            Log.e(TAG, "删除书籍失败：${e.message}", e)
+        }
     }
     
     /**
      * 清除所有缓存
      */
     suspend fun clearAllCache() {
-        pagesCacheManager.clearAllCache()
+        booksCache.clearAllCache()
     }
     
     /**
-     * 加载结果密封类
-     */
-    sealed class LoadResult {
-        data class Success(val pages: Map<Int, TextChunk>) : LoadResult()
-        object NotExist : LoadResult()
-        data class Error(val message: String) : LoadResult()
-    }
-
-    /**
-     * 同步加载页面内容
+     * 同步加载页面内容（重构版本）
      * 
      * 检查内存缓存和数据库缓存的完整性，按需加载数据：
      * 1. 如果内存缓存已完整，直接返回
@@ -174,317 +160,111 @@ class TextManager(private val context: Context) {
     suspend fun syncLoadPages(uri: Uri, fileType: FileType, avgCharsPerLine: Int, maxLinesPerPage: Int) {
         val uriString = uri.toString()
         
-        // 1. 检查内存缓存是否完整
-        val memoryCache = pagesCacheManager.getCache(uriString)
-        if (memoryCache?.isCompleted() == true) {
-            // 内存缓存已完整，直接返回
-            return
-        }
-        
-        // 2. 检查数据库缓存是否完整
-        val cacheManager = CacheManager(context)
-        val book = cacheManager.getBook(uriString)
-        
-        if (book?.isCompleted == true) {
-            // 数据库缓存已完整，将数据加载到内存
-            loadPagesFromDatabaseToMemory(uriString, cacheManager)
-        } else {
-            // 3. 数据库也不完整，启动后台提取任务
-            extractTextFromFileThenSaveCache(uri, fileType, avgCharsPerLine, maxLinesPerPage)
+        try {
+            val memoryCache = booksCache.getCache(uriString)
+            if (memoryCache?.isCompleted() == true) {
+                Log.d(TAG, "内存缓存已完整，直接返回：$uriString")
+                return
+            }
+            
+            val book = try {
+                CacheManager(context).getBook(uriString)
+            } catch (e: Exception) {
+                Log.e(TAG, "获取书籍信息失败：${e.message}", e)
+                null
+            }
+            
+            if (book?.isCompleted == true) {
+                Log.d(TAG, "数据库缓存已完整，加载到内存：$uriString")
+                cacheCoordinator.loadAllPagesToMemory(uriString)
+            } else {
+                Log.d(TAG, "启动后台提取任务：$uriString")
+                extractTextFromFileAndSaveCache(uri, fileType, avgCharsPerLine, maxLinesPerPage)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "同步加载页面失败：${e.message}", e)
         }
     }
     
     /**
-     * 将数据库中的页面数据加载到内存缓存
-     * 
-     * @param uriString 文件 URI 字符串
-     * @param cacheManager 缓存管理器
+     * 异步提取文本并保存缓存（增强错误处理）
      */
-    private suspend fun loadPagesFromDatabaseToMemory(uriString: String, cacheManager: CacheManager) {
-        // 创建内存缓存对象（如果不存在）
-        if (!pagesCacheManager.hasCache(uriString)) {
-            pagesCacheManager.setCache(uriString, PagesCache(uriString))
-        }
-        
-        val memoryCache = pagesCacheManager.getCache(uriString) ?: return
-        
-        // 从数据库获取所有页面
-        val allPages = cacheManager.getAllPages(uriString)
-        
-        // 批量加载到内存缓存
-        allPages.forEach { page ->
-            val textChunk = TextChunk(
-                content = page.content,
-                isCompleted = page.isCompleted,
-                index = page.pageNumber
-            )
-            memoryCache.addPage(textChunk)
-        }
-        
-        // 获取书籍信息并标记完成状态
-        val book = cacheManager.getBook(uriString)
-        if (book != null) {
-            memoryCache.setCompleted(book.isCompleted)
-            
-            // 恢复上次阅读进度
-            val progress = cacheManager.loadReadingProgress(uriString)
-            progress?.let { lastPage ->
-                memoryCache.setLastReadingPageNumber(lastPage)
-            }
-        }
-    }
-
-    /**
-     * 异步提取原始文本并分页
-     * 
-     * 从指定文件中提取文本内容，自动根据布局参数进行分页处理。
-     * 返回一个 Flow，可以异步收集每个页面内容。
-     * 
-     * @param uri 文件 URI
-     * @param fileType 文件类型（TXT、PDF、EPUB 等）
-     * @param avgCharsPerLine 每行平均字符数（用于分页计算）
-     * @param maxLinesPerPage 每页最大行数（用于分页计算）
-     * @return Flow<TextChunk> 文本块流，每个 TextChunk 代表一页内容
-     * 
-     * @see TextExtractor.extractTextRaw 底层文本提取
-     * @see paginateText 文本分页处理
-     */
-    private suspend fun extractTextFromFileThenSaveCache(uri: Uri, fileType: FileType, avgCharsPerLine: Int, maxLinesPerPage: Int) = withContext(Dispatchers.IO) {
-        // 没有缓存，从源文件提取并保存缓存
-        val extractor = TextExtractorFactory.getExtractor(context, fileType)
-        val rawTextFlow = extractor.extractTextRaw(uri)
-        if(!pagesCacheManager.hasCache(uri.toString())) {
-            pagesCacheManager.setCache(uri.toString(), PagesCache(uri.toString()))
-        }
-        val cacheManager = CacheManager(context)
-        
-        var pageCount = 0
-        var lastPageIndex = 0
-        var totalWords = 0
-
-        paginateText(rawTextFlow, avgCharsPerLine, maxLinesPerPage).collect { textChunk ->
-            // 保存到内存缓存（直接添加，无需判断）
-            pagesCacheManager.getCache(uri.toString())?.addPage(textChunk)
-            
-            // 保存到数据库（Room 的 IGNORE 策略会自动处理重复）
-            cacheManager.savePage(
-                uri.toString(), 
-                Page(
-                    bookId = uri.toString(),
-                    pageNumber = textChunk.index,
-                    content = textChunk.content,
-                    isCompleted = textChunk.isCompleted
-                )
-            )
-            
-            pageCount++
-            lastPageIndex = textChunk.index
-            totalWords += textChunk.content.length
-            
-            // 每 100 页或最后一页时保存一次 book
-            if (pageCount % 100 == 0 || textChunk.isCompleted) {
-                cacheManager.saveBook(Book(
-                    bookId = uri.toString(),
-                    title = uri.toString().substringAfterLast("/"),
-                    filePath = uri.toString(),
-                    totalWords = totalWords,
-                    totalPages = textChunk.index + 1,
-                    lastReadTime = System.currentTimeMillis()
-                ))
-            }
-            if(textChunk.isCompleted){
-                // 标记缓存完成
-                pagesCacheManager.getCache(uri.toString())?.setCompleted(true)
-            }
-        }
-
-    }
-    /**
-     * 将连续的文本流分割成适合显示的页面
-     * @param textFlow 原始文本流
-     * @param avgCharsPerLine 每行平均字符数
-     * @param maxLinesPerPage 每页最大行数
-     * @return 返回分页后的文本块 Flow
-     */
-    private suspend fun paginateText(
-        textFlow: Flow<String>,
-        avgCharsPerLine: Int,
+    private suspend fun extractTextFromFileAndSaveCache(
+        uri: Uri, 
+        fileType: FileType, 
+        avgCharsPerLine: Int, 
         maxLinesPerPage: Int
-    ): Flow<TextChunk> = flow {
-        var index = 0
-        var currentContent = StringBuilder()
-        var currentLines = 0
-
-        textFlow.collect { text ->
-            // 按行处理
-            text.lines().forEach { line ->
-                val lineContent = line + "\n"  // 准备带换行符的内容
-
-                // 计算这一行需要多少行来显示
-                val linesNeeded = if (line.isEmpty()) {
-                    1  // 空行也占一行
-                } else {
-                    kotlin.math.ceil(line.length.toDouble() / avgCharsPerLine).toInt()
-                }
-
-                // 情况 1：这一行本身就超过一页
-                if (linesNeeded > maxLinesPerPage) {
-                    // 如果当前页有内容，先发送
-                    if (currentContent.isNotEmpty()) {
-                        emit(
-                            TextChunk(
-                                content = currentContent.toString(),
-                                isCompleted = false,
-                                index = index + 1
-                            )
-                        )
-                        currentContent.clear()
-                        index++
-                        currentLines = 0
-                    }
-
-                    // 将超长文本分割成多页（除了最后一页）
-                    var remainingText = line
-                    while (remainingText.length > avgCharsPerLine * maxLinesPerPage) {
-                        val charsForFullPage = maxLinesPerPage * avgCharsPerLine
-                        val pageText = remainingText.substring(0, charsForFullPage)
-
-                        emit(
-                            TextChunk(
-                                content = pageText + "\n",
-                                isCompleted = false,
-                                index = index + 1
-                            )
-                        )
-                        index++
-                        remainingText = remainingText.substring(charsForFullPage)
-                    }
-
-                    // 剩余不足一页的部分，保留到 currentContent 中，让下一个 line 补充
-                    if (remainingText.isNotEmpty()) {
-                        currentContent.append(remainingText).append("\n")
-                        currentLines = kotlin.math.ceil(remainingText.length.toDouble() / avgCharsPerLine).toInt()
-                    }
-                }
-                // 情况 2：这一行加上之前的内容会达到或超过一页
-                else if (currentLines + linesNeeded >= maxLinesPerPage && currentContent.isNotEmpty()) {
-                    // 先发送当前页（已有的内容）
-                    emit(
-                        TextChunk(
-                            content = currentContent.toString(),
-                            isCompleted = false,
-                            index = index + 1
-                        )
+    ) = withContext(Dispatchers.IO) {
+        val uriString = uri.toString()
+        
+        try {
+            if (!booksCache.hasCache(uriString)) {
+                booksCache.setCache(uriString, PagesCache(uriString))
+            }
+            
+            var pageCount = 0
+            var lastPageIndex = 0
+            var totalWords = 0
+            
+            textLoader.extractAndPaginate(uri, fileType, avgCharsPerLine, maxLinesPerPage).collect { textChunk ->
+                try {
+                    val page = Page(
+                        bookId = uriString,
+                        pageNumber = textChunk.index,
+                        content = textChunk.content,
+                        isCompleted = textChunk.isCompleted
                     )
-                    currentContent.clear()
-                    index++
-                    currentLines = 0
-
-                    // 现在处理这一行，检查是否能完整放入新的一页
-                    if (linesNeeded <= maxLinesPerPage) {
-                        // 可以完整放入，添加到新的一页
-                        currentContent.append(lineContent)
-                        currentLines += linesNeeded
-                    } else {
-                        // 这一行本身就超过一页，需要分割
-                        var remainingText = line
-                        while (remainingText.length > avgCharsPerLine * maxLinesPerPage) {
-                            val charsForFullPage = maxLinesPerPage * avgCharsPerLine
-                            val pageText = remainingText.substring(0, charsForFullPage)
-
-                            emit(
-                                TextChunk(
-                                    content = pageText + "\n",
-                                    isCompleted = false,
-                                    index = index + 1
-                                )
-                            )
-                            index++
-                            remainingText = remainingText.substring(charsForFullPage)
-                        }
-
-                        // 剩余不足一页的部分，保留到 currentContent 中
-                        if (remainingText.isNotEmpty()) {
-                            currentContent.append(remainingText).append("\n")
-                            currentLines = kotlin.math.ceil(remainingText.length.toDouble() / avgCharsPerLine).toInt()
-                        }
+                    
+                    cacheCoordinator.savePage(uriString, page)
+                    
+                    pageCount++
+                    lastPageIndex = textChunk.index
+                    totalWords += textChunk.content.length
+                    
+                    if (pageCount % 100 == 0 || textChunk.isCompleted) {
+                        saveBookInfo(uriString, totalWords, lastPageIndex + 1)
                     }
-                }
-                // 情况 3：这一行可以放入当前页
-                else {
-                    // 即使可以放入，也要检查这一行是否需要分割成多页
-                    if (linesNeeded > 1 && currentLines + linesNeeded > maxLinesPerPage) {
-                        // 这一行需要跨页：先添加能放入当前页的部分
-                        val charsFitInCurrentPage = (maxLinesPerPage - currentLines) * avgCharsPerLine
-                        val firstPart = line.take(charsFitInCurrentPage)
-
-                        currentContent.append(firstPart).append("\n")
-                        currentLines += kotlin.math.ceil(firstPart.length.toDouble() / avgCharsPerLine).toInt()
-
-                        // 发送当前页
-                        emit(
-                            TextChunk(
-                                content = currentContent.toString(),
-                                isCompleted = false,
-                                index = index + 1
-                            )
-                        )
-                        currentContent.clear()
-                        index++
-                        currentLines = 0
-
-                        // 处理剩余部分
-                        val remainingText = line.drop(charsFitInCurrentPage)
-                        if (remainingText.isNotEmpty()) {
-                            // 检查剩余部分是否超过一页
-                            val remainingLinesNeeded = kotlin.math.ceil(remainingText.length.toDouble() / avgCharsPerLine).toInt()
-                            if (remainingLinesNeeded > maxLinesPerPage) {
-                                // 剩余部分也超过一页，继续分割
-                                var textToSplit = remainingText
-                                while (textToSplit.length > avgCharsPerLine * maxLinesPerPage) {
-                                    val charsForFullPage = maxLinesPerPage * avgCharsPerLine
-                                    val pageText = textToSplit.substring(0, charsForFullPage)
-
-                                    emit(
-                                        TextChunk(
-                                            content = pageText + "\n",
-                                            isCompleted = false,
-                                            index = index + 1
-                                        )
-                                    )
-                                    index++
-                                    textToSplit = textToSplit.substring(charsForFullPage)
-                                }
-
-                                // 最后剩余不足一页的部分
-                                if (textToSplit.isNotEmpty()) {
-                                    currentContent.append(textToSplit).append("\n")
-                                    currentLines = kotlin.math.ceil(textToSplit.length.toDouble() / avgCharsPerLine).toInt()
-                                }
-                            } else {
-                                // 剩余部分不超过一页，直接添加
-                                currentContent.append(remainingText).append("\n")
-                                currentLines = remainingLinesNeeded
-                            }
-                        }
-                    } else {
-                        // 简单情况：整行都可以放入当前页
-                        currentContent.append(lineContent)
-                        currentLines += linesNeeded
+                    
+                    if (textChunk.isCompleted) {
+                        cacheCoordinator.markCacheAsCompleted(uriString, totalWords, lastPageIndex + 1)
+                        Log.i(TAG, "文本提取完成：$uriString, 总页数：${lastPageIndex + 1}, 总字数：$totalWords")
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "保存页面失败：${textChunk.index}, ${e.message}", e)
                 }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "提取文本失败：${e.message}", e)
         }
-
-        // 发送剩余的内容（最后一页）
-        if (currentContent.isNotEmpty()) {
-            emit(
-                TextChunk(
-                    content = currentContent.toString(),
-                    isCompleted = true,
-                    index = if (index > 0) index + 1 else 1
+    }
+    
+    private suspend fun saveBookInfo(uriString: String, totalWords: Int, totalPages: Int) {
+        try {
+            val cacheManager = CacheManager(context)
+            val existingBook = cacheManager.getBook(uriString)
+            
+            if (existingBook != null) {
+                cacheManager.saveBook(
+                    existingBook.copy(
+                        totalWords = totalWords,
+                        totalPages = totalPages,
+                        lastReadTime = System.currentTimeMillis()
+                    )
                 )
-            )
+            } else {
+                cacheManager.saveBook(
+                    Book(
+                        bookId = uriString,
+                        title = uriString.substringAfterLast("/"),
+                        filePath = uriString,
+                        totalWords = totalWords,
+                        totalPages = totalPages,
+                        lastReadTime = System.currentTimeMillis()
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "保存书籍信息失败：${e.message}", e)
         }
     }
 }
