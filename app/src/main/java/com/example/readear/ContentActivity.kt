@@ -109,7 +109,7 @@ class ContentActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         // 释放 URI 权限（可选，根据需求决定）
-        // releasePersistedUriPermission()
+        releasePersistedUriPermission()
     }
     
     /**
@@ -192,7 +192,7 @@ fun ContentScreen(
 
             // 2. 尝试获取阅读进度（设置超时，避免无限等待）
             var retryCount = 0
-            val maxRetryCount = 50 // 最多重试 50 次（5 秒）
+            val maxRetryCount = 10 // 最多重试 50 次（5 秒）
             
             while (lastReadingPage == null && !hasLoadedProgress && retryCount < maxRetryCount) {
                 val progress = textManager.getLastReadPageNumber(uri.toString())
