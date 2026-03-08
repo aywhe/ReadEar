@@ -59,6 +59,38 @@ class CacheCoordinator(
     }
     
     /**
+     * 获取指定页面（优先从内存缓存获取，如果没有则从数据库加载）
+     * 
+     * @param uri 文件 URI
+     * @param pageNumber 页码（从 0 开始）
+     * @return 返回该页的文本块，如果不存在返回 null
+     */
+    suspend fun getPage(uri: String, pageNumber: Int): TextChunk? {
+        return withContext(Dispatchers.Default) {
+            // 优先从内存缓存获取
+            val memoryCache = booksCache.getCache(uri)
+            if (memoryCache != null && memoryCache.hasPage(pageNumber)) {
+                return@withContext memoryCache.getPage(pageNumber)
+            }
+            
+            // 如果内存缓存不存在，尝试从数据库加载
+            try {
+                val page = cacheManager.getPage(uri, pageNumber)
+                if (page != null) {
+                    // 加载到内存缓存
+                    val newCache = ensureMemoryCacheExists(uri)
+                    newCache.addPage(TextChunk(page.content, page.isCompleted, page.pageNumber))
+                    return@withContext TextChunk(page.content, page.isCompleted, page.pageNumber)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            
+            null
+        }
+    }
+    
+    /**
      * 从数据库批量加载页面到内存缓存
      * 
      * @param uri 文件 URI

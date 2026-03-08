@@ -10,9 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -31,12 +29,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.AnnotatedString
 import com.example.readear.ui.theme.ReadEarTheme
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.core.net.toUri
@@ -161,9 +155,6 @@ fun ContentScreen(
     var totalPages by remember { mutableStateOf(0) }
     var loadedPages by remember { mutableStateOf<Map<Int, TextChunk>>(emptyMap()) }
 
-    // 初始加载状态
-    var isLoadingInitialData by remember { mutableStateOf(true) }
-    // 是否已获取到进度
     var hasLoadedProgress by remember { mutableStateOf(false) }
     // 上次阅读进度
     var lastReadingPage by remember { mutableStateOf<Int?>(null) }
@@ -226,61 +217,63 @@ fun ContentScreen(
                 pagerState.scrollToPage(lastReadingPage!!)
             }
 
-            // 5. 检查是否有书籍缓存
-            hasBook = textManager.hasBook(uri.toString())
-
-            isLoadingInitialData = false
-
         } catch (e: Exception) {
             errorMessage = "加载失败：${e.message}"
-            isLoadingInitialData = false
         }
     }
 
-    // 新增：定时获取总页数，直到缓存完成
+    // 任务 1：监听 hasBook 状态变化（快速响应）
     DisposableEffect(Unit) {
-        val getPageCountJob = lifecycleScope.launch {
+        val hasBookJob = lifecycleScope.launch {
+            // 等待到有书为止
+            while (!textManager.hasBook(uri.toString())) {
+                delay(500)
+            }
+            
+            // 一旦有书，立即设置
+            hasBook = true
+            // ✅ 设置完成后立即退出
+        }
+
+        onDispose {
+            hasBookJob.cancel()
+        }
+    }
+
+    // 任务 2：持续更新 totalPages（后台运行）
+    DisposableEffect(Unit) {
+        val pageCountJob = lifecycleScope.launch {
+            // 持续检查，直到书籍加载完成
             while (true) {
                 delay(2000)
+                
                 val pagesCount = textManager.getPagesCount(uri.toString())
                 if (pagesCount != null && pagesCount > 0) {
                     totalPages = pagesCount
                 }
                 
-                // 检查是否已完成，如果完成则退出循环
-                val book = textManager.hasBook(uri.toString())
-                val memoryCache = com.example.readear.BooksCache.getCache(uri.toString())
-                val isCompleted = memoryCache?.isCompleted() ?: false
-                
-                if (isCompleted && pagesCount != null && pagesCount > 0) {
+                // 完成后退出
+                if (textManager.isBookCompleted(uri.toString())) {
                     break
                 }
             }
         }
 
         onDispose {
-            getPageCountJob.cancel()
+            pageCountJob.cancel()
         }
     }
 
     // 监听页面变化，加载当前页面和预加载后续页面
     LaunchedEffect(pagerState.currentPage) {
-        if (!isLoadingInitialData && hasBook) {
+        if (textManager.hasBook(uri.toString())) {
             onPageChanged(pagerState.currentPage)
 
-            // 预加载后续 5 页
+            // 预加载后续 1 页
             lifecycleScope.launch {
-                textManager.preloadPagesRange(uri.toString(), pagerState.currentPage, pagerState.currentPage + 5)
+                textManager.preloadPagesRange(uri.toString(), pagerState.currentPage, pagerState.currentPage + 1)
             }
-
-            // 预加载前几页（防止用户往回翻）
-            lifecycleScope.launch {
-                if (pagerState.currentPage > 5) {
-                    textManager.preloadPagesRange(uri.toString(), pagerState.currentPage - 5, pagerState.currentPage - 1)
-                } else {
-                    textManager.preloadPagesRange(uri.toString(), 0, pagerState.currentPage - 1)
-                }
-            }
+            // 不用预加载前一页，即使回退就从数据库中获取把
         }
     }
 
@@ -289,7 +282,7 @@ fun ContentScreen(
         val autoSaveJob = lifecycleScope.launch {
             while (true) {
                 delay(60_000)
-                if (hasBook && !isLoadingInitialData) {
+                if (textManager.hasBook(uri.toString())) {
                     textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
                 }
             }
@@ -371,13 +364,6 @@ fun ContentScreen(
                 .background(if (isDarkTheme) Color.DarkGray else Color.White)
         ) {
             when {
-                // 正在初始加载中
-                isLoadingInitialData -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-
                 // 有错误
                 errorMessage != null -> {
                     Column(
@@ -432,7 +418,7 @@ fun ContentScreen(
                             val maxRetryCount = 30 // 减少重试次数，30 * 100ms = 3 秒
                             
                             while (chunk.value == null && retryCount < maxRetryCount) {
-                                val pageContent = textManager.getPageFromMemory(uri.toString(), page)
+                                val pageContent = textManager.getPage(uri.toString(), page)
                                 if (pageContent != null) {
                                     chunk.value = pageContent
                                     break

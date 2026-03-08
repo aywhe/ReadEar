@@ -3,7 +3,6 @@ package com.example.readear
 import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import android.util.Log
 
@@ -72,19 +71,17 @@ class TextManager(private val context: Context) {
     }
 
     /**
-     * 获取缓存的页面内容
+     * 获取缓存的页面内容（优先从内存缓存获取）
      * @param uri 文件 URI
      * @param pageNumber 页码（从 0 开始）
      * @return 返回该页的文本块，如果不存在返回 null
      */
     suspend fun getPage(uri: String, pageNumber: Int): TextChunk? {
-        return withContext(Dispatchers.Default) {
-            try {
-                booksCache.getCache(uri)?.getPage(pageNumber)
-            } catch (e: Exception) {
-                Log.e(TAG, "获取页面失败：$pageNumber, ${e.message}", e)
-                null
-            }
+        return try {
+            cacheCoordinator.getPage(uri, pageNumber)
+        } catch (e: Exception) {
+            Log.e(TAG, "获取页面失败：$pageNumber, ${e.message}", e)
+            null
         }
     }
 
@@ -110,22 +107,6 @@ class TextManager(private val context: Context) {
             }
         }
     }
-    
-    /**
-     * 同步加载单个页面内容（用于 Compose UI）
-     * @param uri 文件 URI
-     * @param pageNumber 页码（从 0 开始）
-     * @return 返回该页的文本块，如果不存在返回 null
-     */
-    fun getPageFromMemory(uri: String, pageNumber: Int): TextChunk? {
-        return try {
-            booksCache.getCache(uri)?.getPage(pageNumber)
-        } catch (e: Exception) {
-            Log.e(TAG, "同步获取页面失败：$pageNumber, ${e.message}", e)
-            null
-        }
-    }
-
     
     /**
      * 保存阅读进度（两级缓存）
@@ -154,6 +135,27 @@ class TextManager(private val context: Context) {
      */
     suspend fun clearAllCache() {
         booksCache.clearAllCache()
+    }
+    
+    /**
+     * 检查书籍是否已完成加载
+     * @param uri 文件 URI
+     * @return 如果已完成返回 true
+     */
+    suspend fun isBookCompleted(uri: String): Boolean {
+        return try {
+            // 优先检查内存缓存
+            val memoryCache = booksCache.getCache(uri)
+            if (memoryCache?.isCompleted() == true) {
+                return true
+            }
+            
+            // 再检查数据库
+            CacheManager(context).isCompleted(uri)
+        } catch (e: Exception) {
+            Log.e(TAG, "检查书籍完成状态失败：${e.message}", e)
+            false
+        }
     }
     
     /**
