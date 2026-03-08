@@ -7,30 +7,19 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.readear.ui.theme.ReadEarTheme
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.core.net.toUri
+import com.example.readear.ui.theme.ReadEarTheme
 
 class ContentActivity : ComponentActivity() {
     
@@ -40,12 +29,6 @@ class ContentActivity : ComponentActivity() {
         const val EXTRA_FILE_TYPE = "extra_file_type"
     }
     
-    // 当前阅读页码
-    private var currentPageNumber: Int = 0
-    
-    // 用于保存进度的协程作用域
-    private val progressScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -54,7 +37,6 @@ class ContentActivity : ComponentActivity() {
         val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "未知文件"
         val fileType = FileType.valueOf(intent.getStringExtra(EXTRA_FILE_TYPE) ?: FileType.TXT.name)
         
-        // 获取 URI 并请求持久化读取权限
         val fileUri = fileUriString.toUri()
         ensurePersistedUriPermission(fileUri)
         
@@ -64,8 +46,7 @@ class ContentActivity : ComponentActivity() {
                     uri = fileUri,
                     fileName = fileName,
                     fileType = fileType,
-                    onNavigateBack = { finish() },
-                    onPageChanged = { page -> currentPageNumber = page }
+                    onNavigateBack = { finish() }
                 )
             }
         }
@@ -79,12 +60,10 @@ class ContentActivity : ComponentActivity() {
      */
     private fun ensurePersistedUriPermission(uri: Uri) {
         try {
-            // 检查是否已经有持久化权限
             val hasPermission = contentResolver.persistedUriPermissions.any { 
                 it.uri == uri && it.isReadPermission 
             }
             
-            // 如果没有权限，才申请新的
             if (!hasPermission) {
                 contentResolver.takePersistableUriPermission(
                     uri,
@@ -97,20 +76,6 @@ class ContentActivity : ComponentActivity() {
             e.printStackTrace()
         }
     }
-    
-    override fun onPause() {
-        super.onPause()
-    }
-    
-    override fun onStop() {
-        super.onStop()
-    }
-    
-    override fun onDestroy() {
-        super.onDestroy()
-        // 取消协程作用域
-        progressScope.cancel()
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,148 +84,19 @@ fun ContentScreen(
     uri: Uri,
     fileName: String,
     fileType: FileType,
-    onNavigateBack: () -> Unit,
-    onPageChanged: (Int) -> Unit = {}
+    onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val lifecycleScope = rememberCoroutineScope()
-    
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var hasContent by remember { mutableStateOf(false) }
-    var totalPages by remember { mutableStateOf(0) }
-    var loadedPages by remember { mutableStateOf<Map<Int, TextChunk>>(emptyMap()) }
-    
-    // 初始加载状态
-    var isLoadingInitialData by remember { mutableStateOf(true) }
-    // 是否已获取到进度
-    var hasLoadedProgress by remember { mutableStateOf(false) }
-    // 上次阅读进度
-    var lastReadingPage by remember { mutableStateOf<Int?>(null) }
-    
-    val pagerState = rememberPagerState(
-        initialPage = 0,
-        pageCount = { totalPages }
-    )
-    
-    var showJumpDialog by remember { mutableStateOf(false) }
-    
-    val layoutParams by remember(context) {
-        derivedStateOf {
-            calculateLayoutParameters(context)
-        }
-    }
-    
-    // TextManager 实例
-    val textManager = remember(context) { TextManager(context) }
-    
-    // 启动初始化：同步内存数据并恢复上次阅读位置
-    LaunchedEffect(uri, fileType) {
-        try {
-            // 1. 调用 syncLoadPages 同步内存数据
-            textManager.syncLoadPages(uri, fileType, layoutParams.avgCharsPerLine, layoutParams.maxLinesPerPage)
-            
-            // 2. 等待获取到进度信息（可以是 0）
-            while (lastReadingPage == null && !hasLoadedProgress) {
-                val progress = textManager.getLastReadPageNumber(uri.toString())
-                if (progress != null) {
-                    lastReadingPage = progress
-                    hasLoadedProgress = true
-                } else {
-                    // 等待一小段时间后重试
-                    delay(100)
-                }
-            }
-            
-            // 3. 跳转到上次阅读位置
-            if (lastReadingPage != null) {
-                pagerState.scrollToPage(lastReadingPage!!)
-            }
-            
-            // 4. 更新总页数和内容状态
-            val pagesCount = textManager.getPagesCount(uri.toString())
-            if (pagesCount != null && pagesCount > 0) {
-                totalPages = pagesCount
-                hasContent = true
-            }
-            
-            isLoadingInitialData = false
-            
-        } catch (e: Exception) {
-            errorMessage = "加载失败：${e.message}"
-            isLoadingInitialData = false
-        }
-    }
-    
-    // 监听页面变化，加载当前页面和预加载后续页面
-    LaunchedEffect(pagerState.currentPage) {
-        if (!isLoadingInitialData && hasContent) {
-            onPageChanged(pagerState.currentPage)
-
-            // 预加载后续 5 页
-            lifecycleScope.launch {
-                textManager.preloadPagesRange(uri.toString(), pagerState.currentPage, pagerState.currentPage + 5)
-            }
-            
-            // 预加载前几页（防止用户往回翻）
-            lifecycleScope.launch {
-                if (pagerState.currentPage > 5) {
-                    textManager.preloadPagesRange(uri.toString(), pagerState.currentPage - 5, pagerState.currentPage - 1)
-                } else {
-                    textManager.preloadPagesRange(uri.toString(), 0, pagerState.currentPage - 1)
-                }
-            }
-        }
-    }
-
-    // 定时保存进度：每 30 秒自动保存一次
-    DisposableEffect(Unit) {
-        val autoSaveJob = lifecycleScope.launch {
-            while (true) {
-                delay(30_000)
-                if (hasContent && !isLoadingInitialData) {
-                    textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
-                }
-            }
-        }
-        
-        onDispose {
-            // 取消定时任务并立即保存一次
-            autoSaveJob.cancel()
-            lifecycleScope.launch {
-                textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
-            }
-        }
-    }
     
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { 
-                    Text(
-                        text = fileName,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    ) 
-                },
+                title = { Text(text = fileName) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "返回"
-                        )
-                    }
-                },
-                actions = {
-                    if (hasContent && totalPages > 0) {
-                        Text(
-                            text = "${pagerState.currentPage + 1}/$totalPages",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier
-                                .padding(end = 16.dp)
-                                .clickable { showJumpDialog = true }
-                        )
+                        Text("返回")
                     }
                 }
             )
@@ -269,104 +105,11 @@ fun ContentScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(innerPadding),
+            contentAlignment = Alignment.Center
         ) {
-            when {
-                // 正在初始加载中
-                isLoadingInitialData -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-                
-                // 有错误
-                errorMessage != null -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = errorMessage ?: "未知错误",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { 
-                            val intent = Intent(context, ContentActivity::class.java).apply {
-                                putExtra(ContentActivity.EXTRA_FILE_URI, uri.toString())
-                                putExtra(ContentActivity.EXTRA_FILE_NAME, fileName)
-                                putExtra(ContentActivity.EXTRA_FILE_TYPE, fileType.name)
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                            }
-                            context.startActivity(intent)
-                        }) {
-                            Text("重试")
-                        }
-                    }
-                }
-                
-                // 没有内容
-                !hasContent -> {
-                    Text(
-                        text = "文件中没有内容",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-                
-                // 正常显示内容
-                else -> {
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxSize(),
-                        beyondViewportPageCount = Int.MAX_VALUE
-                    ) { page ->
-                        // 尝试获取页面内容
-                        val chunk = remember(page) {
-                            mutableStateOf<TextChunk?>(null)
-                        }
-                        
-                        // 如果为 null，等待并重新尝试获取
-                        LaunchedEffect(page) {
-                            var retryCount = 0
-                            while (chunk.value == null && retryCount < 50) {
-                                val pageContent = textManager.getPageSync(uri.toString(), page)
-                                if (pageContent != null) {
-                                    chunk.value = pageContent
-                                    break
-                                }
-                                delay(100)
-                                retryCount++
-                            }
-                            
-                            // 如果超时仍未获取到，使用空文本块
-                            if (chunk.value == null) {
-                                chunk.value = TextChunk("", false, page)
-                            }
-                        }
-                        
-                        // 显示内容（确保不为 null）
-                        val displayChunk = chunk.value ?: TextChunk("", false, page)
-                        PageContent(chunk = displayChunk)
-                    }
-                }
-            }
+            Text("请重新设计内容区域")
         }
-    }
-    
-    if (showJumpDialog) {
-        JumpToPageDialog(
-            currentPage = pagerState.currentPage + 1,
-            totalPages = totalPages,
-            onDismiss = { showJumpDialog = false },
-            onConfirm = { targetPage ->
-                lifecycleScope.launch {
-                    pagerState.animateScrollToPage(targetPage - 1)
-                }
-                showJumpDialog = false
-            }
-        )
     }
 }
 
@@ -380,18 +123,12 @@ data class LayoutParameters(
 
 /**
  * 计算并记住页面布局参数
- * 使用屏幕尺寸和密度自动计算每行字符数和每页行数
- * 
- * @param context Context
- * @param density Density
- * @return LayoutParameters 包含 avgCharsPerLine 和 maxLinesPerPage
  */
 @Composable
 private fun rememberLayoutParameters(
     context: Context,
-    density: androidx.compose.ui.unit.Density
+    density: Density
 ): LayoutParameters {
-    // 使用 derivedStateOf 创建响应式计算结果
     return remember(context) {
         calculateLayoutParameters(context)
     }
@@ -399,44 +136,33 @@ private fun rememberLayoutParameters(
 
 /**
  * 计算页面布局参数的独立函数
- * 可以在任何地方调用，无需 Compose 环境
- * 
- * @param context Context
- * @return LayoutParameters 包含 avgCharsPerLine 和 maxLinesPerPage
  */
 fun calculateLayoutParameters(context: Context): LayoutParameters {
-    // 页面布局参数的默认值（基于标准字体大小和行高）
-    val defaultFontSize = 16f // sp
-    val baseLineHeight = 24f // sp
-    val lineHeightScale = 1.5f // 行距倍数
-    val charAspectRatio = 1.0f // 汉字宽高比
-    val charSpacingFactor = 1.1f // 字间距系数
-    
     val displayMetrics = context.resources.displayMetrics
     val screenHeightPx = displayMetrics.heightPixels.toFloat()
     val screenWidthPx = displayMetrics.widthPixels.toFloat()
     
-    // 转换为像素（使用 displayMetrics 而不是 density）
+    val defaultFontSize = 16f
+    val baseLineHeight = 24f
+    val lineHeightScale = 1.5f
+    val charAspectRatio = 1.0f
+    val charSpacingFactor = 1.1f
+    
     val fontSizePx = defaultFontSize * displayMetrics.density
     val baseLineHeightPx = baseLineHeight * displayMetrics.density
     val scaledLineHeightPx = baseLineHeightPx * lineHeightScale
     
-    // 计算左右 padding（16dp * 2）
     val horizontalPaddingPx = 16f * displayMetrics.density * 2
     
-    // 计算可用区域
     val availableWidth = screenWidthPx - horizontalPaddingPx
     
-    // 估算顶部 padding（AppBar 高度约 56dp + status bar）
     val topPaddingPx = (56f + 24f) * displayMetrics.density
     val bottomPaddingPx = 16f * displayMetrics.density
     val availableHeight = screenHeightPx - topPaddingPx - bottomPaddingPx
     
-    // 1. 计算每行平均字符数
     val avgCharWidth = fontSizePx * charAspectRatio * charSpacingFactor
     val avgCharsPerLine = (availableWidth / avgCharWidth).toInt()
     
-    // 2. 计算每页最大行数（限制在合理范围内）
     val maxLinesPerPage = (availableHeight / scaledLineHeightPx).toInt().coerceIn(10, 35)
     
     return LayoutParameters(
@@ -446,10 +172,10 @@ fun calculateLayoutParameters(context: Context): LayoutParameters {
 }
 
 @Composable
-fun PageContent(chunk: TextChunk) {
-    val defaultFontSize = 16.sp // 固定字体大小
-    val baseLineHeight = 24.sp // 固定行高
-    val scaledLineHeight = baseLineHeight * 1.5f // 1.5 倍行距
+fun PageContent(text: String) {
+    val defaultFontSize = 16.sp
+    val baseLineHeight = 24.sp
+    val scaledLineHeight = baseLineHeight * 1.5f
     
     Box(
         modifier = Modifier
@@ -457,7 +183,7 @@ fun PageContent(chunk: TextChunk) {
             .padding(16.dp)
     ) {
         Text(
-            text = chunk.content,
+            text = text,
             style = MaterialTheme.typography.bodyLarge.copy(
                 fontSize = defaultFontSize,
                 lineHeight = baseLineHeight
