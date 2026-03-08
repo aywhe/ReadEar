@@ -43,7 +43,7 @@ class CacheCoordinator(
      */
     suspend fun getLastReadPageNumber(uri: String): Int? {
         return withContext(Dispatchers.Default) {
-            var lastPage = booksCache.getCache(uri)?.getLastReadingPageNumber()
+            val lastPage = booksCache.getCache(uri)?.getLastReadingPageNumber()
             if (lastPage != null) {
                 return@withContext lastPage
             }
@@ -199,9 +199,10 @@ class CacheCoordinator(
     }
     
     private fun ensureMemoryCacheExists(uri: String): PagesCache {
-        if (!booksCache.hasCache(uri)) {
-            booksCache.setCache(uri, PagesCache(uri))
+        return booksCache.getCache(uri) ?: run {
+            val newCache = PagesCache(uri)
+            booksCache.setCache(uri, newCache)
+            newCache
         }
-        return booksCache.getCache(uri)!!
     }
 }

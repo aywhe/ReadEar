@@ -8,6 +8,15 @@ import kotlinx.coroutines.withContext
 import android.util.Log
 
 /**
+ * 文本加载状态
+ */
+enum class TextLoadingState {
+    LOADING,      // 加载中
+    COMPLETED,    // 已完成
+    ERROR         // 错误
+}
+
+/**
  * 文本管理器（重构版本）
  * 
  * 职责：
@@ -32,6 +41,9 @@ class TextManager(private val context: Context) {
     companion object {
         private const val TAG = "TextManager"
     }
+    
+    // 文本加载状态回调
+    var onLoadingStateChanged: ((String, TextLoadingState) -> Unit)? = null
     
     /**
      * 检查指定 URI 的书籍是否有缓存
@@ -164,6 +176,7 @@ class TextManager(private val context: Context) {
             val memoryCache = booksCache.getCache(uriString)
             if (memoryCache?.isCompleted() == true) {
                 Log.d(TAG, "内存缓存已完整，直接返回：$uriString")
+                onLoadingStateChanged?.invoke(uriString, TextLoadingState.COMPLETED)
                 return
             }
             
@@ -177,12 +190,15 @@ class TextManager(private val context: Context) {
             if (book?.isCompleted == true) {
                 Log.d(TAG, "数据库缓存已完整，加载到内存：$uriString")
                 cacheCoordinator.loadAllPagesToMemory(uriString)
+                onLoadingStateChanged?.invoke(uriString, TextLoadingState.COMPLETED)
             } else {
                 Log.d(TAG, "启动后台提取任务：$uriString")
+                onLoadingStateChanged?.invoke(uriString, TextLoadingState.LOADING)
                 extractTextFromFileAndSaveCache(uri, fileType, avgCharsPerLine, maxLinesPerPage)
             }
         } catch (e: Exception) {
             Log.e(TAG, "同步加载页面失败：${e.message}", e)
+            onLoadingStateChanged?.invoke(uriString, TextLoadingState.ERROR)
         }
     }
     
@@ -228,6 +244,7 @@ class TextManager(private val context: Context) {
                     if (textChunk.isCompleted) {
                         cacheCoordinator.markCacheAsCompleted(uriString, totalWords, lastPageIndex + 1)
                         Log.i(TAG, "文本提取完成：$uriString, 总页数：${lastPageIndex + 1}, 总字数：$totalWords")
+                        onLoadingStateChanged?.invoke(uriString, TextLoadingState.COMPLETED)
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "保存页面失败：${textChunk.index}, ${e.message}", e)
@@ -235,6 +252,7 @@ class TextManager(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "提取文本失败：${e.message}", e)
+            onLoadingStateChanged?.invoke(uriString, TextLoadingState.ERROR)
         }
     }
     

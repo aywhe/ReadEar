@@ -52,9 +52,6 @@ class ContentActivity : ComponentActivity() {
     // 当前阅读页码
     private var currentPageNumber: Int = 0
 
-    // 用于保存进度的协程作用域
-    private val progressScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -117,8 +114,32 @@ class ContentActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // 取消协程作用域
-        progressScope.cancel()
+        // 释放 URI 权限（可选，根据需求决定）
+        // releasePersistedUriPermission()
+    }
+    
+    /**
+     * 释放持久化 URI 权限（如果需要的话）
+     */
+    private fun releasePersistedUriPermission() {
+        try {
+            val fileUriString = intent.getStringExtra(EXTRA_FILE_URI) ?: return
+            val uri = fileUriString.toUri()
+            
+            // 检查是否有持久化权限
+            val hasPermission = contentResolver.persistedUriPermissions.any {
+                it.uri == uri && it.isReadPermission
+            }
+            
+            if (hasPermission) {
+                contentResolver.releasePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
 
@@ -167,8 +188,8 @@ fun ContentScreen(
         }
     }
 
-    // TextManager 实例
-    val textManager = remember(context) { TextManager(context) }
+    // TextManager 实例（使用 remember 避免重复创建）
+    val textManager = remember(context) { TextManager(context.applicationContext as Context) }
 
     // 启动初始化：同步内存数据并恢复上次阅读位置
     LaunchedEffect(uri, fileType) {
@@ -374,7 +395,9 @@ fun ContentScreen(
                         // 如果为 null，等待并重新尝试获取
                         LaunchedEffect(page) {
                             var retryCount = 0
-                            while (chunk.value == null && retryCount < 50) {
+                            val maxRetryCount = 30 // 减少重试次数，30 * 100ms = 3 秒
+                            
+                            while (chunk.value == null && retryCount < maxRetryCount) {
                                 val pageContent = textManager.getPageFromMemory(uri.toString(), page)
                                 if (pageContent != null) {
                                     chunk.value = pageContent

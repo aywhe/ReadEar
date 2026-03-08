@@ -157,9 +157,13 @@ class CacheManager(private val context: Context) {
         dao.insertReadingProgress(progress)
         
         // 同时更新书籍的最后阅读时间
-        val book = dao.getBook(bookId)
-        if (book != null) {
-            dao.insertBook(book.copy(lastReadTime = System.currentTimeMillis()))
+        try {
+            val book = dao.getBook(bookId)
+            if (book != null) {
+                dao.insertBook(book.copy(lastReadTime = System.currentTimeMillis()))
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("CacheManager", "更新书籍最后阅读时间失败：${e.message}", e)
         }
     }
     

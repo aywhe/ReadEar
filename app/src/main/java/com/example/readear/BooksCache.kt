@@ -1,5 +1,7 @@
 package com.example.readear
 
+import java.util.concurrent.ConcurrentHashMap
+
 /**
  * 全局页面缓存管理器（单例）
  * 
@@ -10,7 +12,7 @@ package com.example.readear
  */
 object BooksCache {
 
-    private val cacheMap = mutableMapOf<String, PagesCache>()
+    private val cacheMap = ConcurrentHashMap<String, PagesCache>()
 
     /**
      * 获取缓存

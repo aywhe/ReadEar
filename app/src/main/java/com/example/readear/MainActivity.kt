@@ -158,10 +158,21 @@ class MainActivity : ComponentActivity() {
      * 清除书籍的内存缓存和数据库数据（后台异步执行）
      */
     private fun clearBookData(fileUri: String) {
-        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
                 val textManager = TextManager(applicationContext)
                 textManager.delBook(fileUri)
+                
+                // 释放 URI 权限
+                try {
+                    val uri = Uri.parse(fileUri)
+                    contentResolver.releasePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (e: Exception) {
+                    // 忽略异常，可能权限本来就不存在
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -170,7 +181,7 @@ class MainActivity : ComponentActivity() {
 
     private fun restoreFileList() {
         // 在后台协程中异步加载数据
-        kotlinx.coroutines.GlobalScope.launch {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
                 val restoredList = fileRepository.loadFileList()
                 // 为每个恢复的 URI 重新请求持久权限
