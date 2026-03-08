@@ -45,6 +45,11 @@ class CacheManager(private val context: Context) {
     suspend fun getBook(bookId: String): Book? = withContext(Dispatchers.IO) {
         dao.getBook(bookId)
     }
+
+    suspend fun isCompleted(bookId: String): Boolean = withContext(Dispatchers.IO) {
+        val book = dao.getBook(bookId)
+        book?.isCompleted ?: false
+    }
     
     /**
      * 获取所有书籍列表

@@ -17,5 +17,5 @@ data class Page(
     val bookId: String,
     val pageNumber: Int,
     val content: String,
-    val index: Int
+    val isCompleted: Boolean = false
 )

@@ -127,7 +127,6 @@ fun ContentScreen(
     val lifecycleScope = rememberCoroutineScope()
     
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var hasContent by remember { mutableStateOf(false) }
     var totalPages by remember { mutableStateOf(0) }
     var loadedPages by remember { mutableStateOf<Map<Int, TextChunk>>(emptyMap()) }
     
@@ -183,7 +182,7 @@ fun ContentScreen(
         val autoSaveJob = lifecycleScope.launch {
             while (true) {
                 delay(30_000) // 30 秒
-                if (hasContent) {
+                if (textManager.hasBook(uri.toString())) {
                     textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
                 }
             }
@@ -218,7 +217,7 @@ fun ContentScreen(
                     }
                 },
                 actions = {
-                    if (hasContent && totalPages > 0) {
+                    if (totalPages > 0) {
                         Text(
                             text = "${pagerState.currentPage + 1}/$totalPages",
                             style = MaterialTheme.typography.bodyMedium,

@@ -94,7 +94,7 @@ class TextManager(private val context: Context) {
                     val page = cacheManager.getPage(uri, pageNumber)
                     
                     if (page != null) {
-                        val textChunk = TextChunk(page.content, false, page.index)
+                        val textChunk = TextChunk(page.content, page.isCompleted, page.pageNumber)
                         // 加载到内存缓存
                         if(!pagesCacheManager.hasCache(uri)) {
                             // 如果内存缓存不存在，先创建一个新的缓存对象
@@ -158,6 +158,81 @@ class TextManager(private val context: Context) {
         data class Error(val message: String) : LoadResult()
     }
 
+    /**
+     * 同步加载页面内容
+     * 
+     * 检查内存缓存和数据库缓存的完整性，按需加载数据：
+     * 1. 如果内存缓存已完整，直接返回
+     * 2. 如果数据库缓存已完整，将数据加载到内存
+     * 3. 如果都不完整，启动后台提取任务
+     * 
+     * @param uri 文件 URI
+     * @param fileType 文件类型
+     * @param avgCharsPerLine 每行平均字符数
+     * @param maxLinesPerPage 每页最大行数
+     */
+    suspend fun syncLoadPages(uri: Uri, fileType: FileType, avgCharsPerLine: Int, maxLinesPerPage: Int) {
+        val uriString = uri.toString()
+        
+        // 1. 检查内存缓存是否完整
+        val memoryCache = pagesCacheManager.getCache(uriString)
+        if (memoryCache?.isCompleted() == true) {
+            // 内存缓存已完整，直接返回
+            return
+        }
+        
+        // 2. 检查数据库缓存是否完整
+        val cacheManager = CacheManager(context)
+        val book = cacheManager.getBook(uriString)
+        
+        if (book?.isCompleted == true) {
+            // 数据库缓存已完整，将数据加载到内存
+            loadPagesFromDatabaseToMemory(uriString, cacheManager)
+        } else {
+            // 3. 数据库也不完整，启动后台提取任务
+            extractTextFromFileThenSaveCache(uri, fileType, avgCharsPerLine, maxLinesPerPage)
+        }
+    }
+    
+    /**
+     * 将数据库中的页面数据加载到内存缓存
+     * 
+     * @param uriString 文件 URI 字符串
+     * @param cacheManager 缓存管理器
+     */
+    private suspend fun loadPagesFromDatabaseToMemory(uriString: String, cacheManager: CacheManager) {
+        // 创建内存缓存对象（如果不存在）
+        if (!pagesCacheManager.hasCache(uriString)) {
+            pagesCacheManager.setCache(uriString, PagesCache(uriString))
+        }
+        
+        val memoryCache = pagesCacheManager.getCache(uriString) ?: return
+        
+        // 从数据库获取所有页面
+        val allPages = cacheManager.getAllPages(uriString)
+        
+        // 批量加载到内存缓存
+        allPages.forEach { page ->
+            val textChunk = TextChunk(
+                content = page.content,
+                isCompleted = page.isCompleted,
+                index = page.pageNumber
+            )
+            memoryCache.addPage(textChunk)
+        }
+        
+        // 获取书籍信息并标记完成状态
+        val book = cacheManager.getBook(uriString)
+        if (book != null) {
+            memoryCache.setCompleted(book.isCompleted)
+            
+            // 恢复上次阅读进度
+            val progress = cacheManager.loadReadingProgress(uriString)
+            progress?.let { lastPage ->
+                memoryCache.setLastReadingPageNumber(lastPage)
+            }
+        }
+    }
 
     /**
      * 异步提取原始文本并分页
@@ -174,7 +249,7 @@ class TextManager(private val context: Context) {
      * @see TextExtractor.extractTextRaw 底层文本提取
      * @see paginateText 文本分页处理
      */
-    private suspend fun extractTextFromFileThenSaveCache(uri: Uri, fileType: FileType, avgCharsPerLine: Int, maxLinesPerPage: Int, onlyUpdate: Boolean = true) = withContext(Dispatchers.IO) {
+    private suspend fun extractTextFromFileThenSaveCache(uri: Uri, fileType: FileType, avgCharsPerLine: Int, maxLinesPerPage: Int) = withContext(Dispatchers.IO) {
         // 没有缓存，从源文件提取并保存缓存
         val extractor = TextExtractorFactory.getExtractor(context, fileType)
         val rawTextFlow = extractor.extractTextRaw(uri)
@@ -198,7 +273,7 @@ class TextManager(private val context: Context) {
                     bookId = uri.toString(),
                     pageNumber = textChunk.index,
                     content = textChunk.content,
-                    index = textChunk.index
+                    isCompleted = textChunk.isCompleted
                 )
             )
             
@@ -207,7 +282,7 @@ class TextManager(private val context: Context) {
             totalWords += textChunk.content.length
             
             // 每 100 页或最后一页时保存一次 book
-            if (pageCount % 100 == 0 || textChunk.isComplete) {
+            if (pageCount % 100 == 0 || textChunk.isCompleted) {
                 cacheManager.saveBook(Book(
                     bookId = uri.toString(),
                     title = uri.toString().substringAfterLast("/"),
@@ -217,7 +292,7 @@ class TextManager(private val context: Context) {
                     lastReadTime = System.currentTimeMillis()
                 ))
             }
-            if(textChunk.isComplete){
+            if(textChunk.isCompleted){
                 // 标记缓存完成
                 pagesCacheManager.getCache(uri.toString())?.setCompleted(true)
             }
@@ -259,7 +334,7 @@ class TextManager(private val context: Context) {
                         emit(
                             TextChunk(
                                 content = currentContent.toString(),
-                                isComplete = false,
+                                isCompleted = false,
                                 index = index + 1
                             )
                         )
@@ -277,7 +352,7 @@ class TextManager(private val context: Context) {
                         emit(
                             TextChunk(
                                 content = pageText + "\n",
-                                isComplete = false,
+                                isCompleted = false,
                                 index = index + 1
                             )
                         )
@@ -297,7 +372,7 @@ class TextManager(private val context: Context) {
                     emit(
                         TextChunk(
                             content = currentContent.toString(),
-                            isComplete = false,
+                            isCompleted = false,
                             index = index + 1
                         )
                     )
@@ -320,7 +395,7 @@ class TextManager(private val context: Context) {
                             emit(
                                 TextChunk(
                                     content = pageText + "\n",
-                                    isComplete = false,
+                                    isCompleted = false,
                                     index = index + 1
                                 )
                             )
@@ -350,7 +425,7 @@ class TextManager(private val context: Context) {
                         emit(
                             TextChunk(
                                 content = currentContent.toString(),
-                                isComplete = false,
+                                isCompleted = false,
                                 index = index + 1
                             )
                         )
@@ -373,7 +448,7 @@ class TextManager(private val context: Context) {
                                     emit(
                                         TextChunk(
                                             content = pageText + "\n",
-                                            isComplete = false,
+                                            isCompleted = false,
                                             index = index + 1
                                         )
                                     )
@@ -406,7 +481,7 @@ class TextManager(private val context: Context) {
             emit(
                 TextChunk(
                     content = currentContent.toString(),
-                    isComplete = true,
+                    isCompleted = true,
                     index = if (index > 0) index + 1 else 1
                 )
             )

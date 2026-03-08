@@ -19,11 +19,11 @@ interface TextExtractor {
 /**
  * 文本块数据类
  * @param content 文本内容
- * @param isComplete 是否是最后一个块
+ * @param isCompleted 是否是最后一个块
  * @param index 章节索引
  */
 data class TextChunk(
     val content: String,
-    val isComplete: Boolean = false,
+    val isCompleted: Boolean = false,
     val index: Int = 0
 )
