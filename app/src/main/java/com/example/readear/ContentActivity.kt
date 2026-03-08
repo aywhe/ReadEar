@@ -24,13 +24,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.readear.ui.theme.ReadEarTheme
-import kotlinx.coroutines.launch
-import androidx.core.net.toUri
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.core.net.toUri
 
 class ContentActivity : ComponentActivity() {
     
@@ -127,8 +127,16 @@ fun ContentScreen(
     val lifecycleScope = rememberCoroutineScope()
     
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var hasContent by remember { mutableStateOf(false) }
     var totalPages by remember { mutableStateOf(0) }
     var loadedPages by remember { mutableStateOf<Map<Int, TextChunk>>(emptyMap()) }
+    
+    // 初始加载状态
+    var isLoadingInitialData by remember { mutableStateOf(true) }
+    // 是否已获取到进度
+    var hasLoadedProgress by remember { mutableStateOf(false) }
+    // 上次阅读进度
+    var lastReadingPage by remember { mutableStateOf<Int?>(null) }
     
     val pagerState = rememberPagerState(
         initialPage = 0,
@@ -146,26 +154,55 @@ fun ContentScreen(
     // TextManager 实例
     val textManager = remember(context) { TextManager(context) }
     
-    // 启动初始化：仅恢复上次阅读位置和检查是否有内容
+    // 启动初始化：同步内存数据并恢复上次阅读位置
     LaunchedEffect(uri, fileType) {
         try {
-            pagerState.scrollToPage(0)
+            // 1. 调用 syncLoadPages 同步内存数据
+            textManager.syncLoadPages(uri, fileType, layoutParams.avgCharsPerLine, layoutParams.maxLinesPerPage)
+            
+            // 2. 等待获取到进度信息（可以是 0）
+            while (lastReadingPage == null && !hasLoadedProgress) {
+                val progress = textManager.getLastReadPageNumber(uri.toString())
+                if (progress != null) {
+                    lastReadingPage = progress
+                    hasLoadedProgress = true
+                } else {
+                    // 等待一小段时间后重试
+                    delay(100)
+                }
+            }
+            
+            // 3. 跳转到上次阅读位置
+            if (lastReadingPage != null) {
+                pagerState.scrollToPage(lastReadingPage!!)
+            }
+            
+            // 4. 更新总页数和内容状态
+            val pagesCount = textManager.getPagesCount(uri.toString())
+            if (pagesCount != null && pagesCount > 0) {
+                totalPages = pagesCount
+                hasContent = true
+            }
+            
+            isLoadingInitialData = false
+            
         } catch (e: Exception) {
             errorMessage = "加载失败：${e.message}"
+            isLoadingInitialData = false
         }
     }
     
     // 监听页面变化，加载当前页面和预加载后续页面
     LaunchedEffect(pagerState.currentPage) {
-        if (textManager.hasBook(uri.toString())) {
+        if (!isLoadingInitialData && hasContent) {
             onPageChanged(pagerState.currentPage)
 
-            // 2. 预加载后续 5 页
+            // 预加载后续 5 页
             lifecycleScope.launch {
                 textManager.preloadPagesRange(uri.toString(), pagerState.currentPage, pagerState.currentPage + 5)
             }
             
-            // 3. 预加载前几页（防止用户往回翻）
+            // 预加载前几页（防止用户往回翻）
             lifecycleScope.launch {
                 if (pagerState.currentPage > 5) {
                     textManager.preloadPagesRange(uri.toString(), pagerState.currentPage - 5, pagerState.currentPage - 1)
@@ -176,13 +213,12 @@ fun ContentScreen(
         }
     }
 
-    // 在 Activity 销毁时保存阅读进度（只保存一次）
+    // 定时保存进度：每 30 秒自动保存一次
     DisposableEffect(Unit) {
-        // 定时保存：每 30 秒自动保存一次进度
         val autoSaveJob = lifecycleScope.launch {
             while (true) {
-                delay(30_000) // 30 秒
-                if (textManager.hasBook(uri.toString())) {
+                delay(30_000)
+                if (hasContent && !isLoadingInitialData) {
                     textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
                 }
             }
@@ -217,7 +253,7 @@ fun ContentScreen(
                     }
                 },
                 actions = {
-                    if (totalPages > 0) {
+                    if (hasContent && totalPages > 0) {
                         Text(
                             text = "${pagerState.currentPage + 1}/$totalPages",
                             style = MaterialTheme.typography.bodyMedium,
@@ -236,12 +272,14 @@ fun ContentScreen(
                 .padding(innerPadding)
         ) {
             when {
-                !hasContent && errorMessage == null -> {
+                // 正在初始加载中
+                isLoadingInitialData -> {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
                 
+                // 有错误
                 errorMessage != null -> {
                     Column(
                         modifier = Modifier.align(Alignment.Center),
@@ -267,6 +305,7 @@ fun ContentScreen(
                     }
                 }
                 
+                // 没有内容
                 !hasContent -> {
                     Text(
                         text = "文件中没有内容",
@@ -276,15 +315,40 @@ fun ContentScreen(
                     )
                 }
                 
+                // 正常显示内容
                 else -> {
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
                         beyondViewportPageCount = Int.MAX_VALUE
                     ) { page ->
-                        val chunk = textManager.getPageSync(uri.toString(), page)
-                            ?: TextChunk("", false, page)
-                        PageContent(chunk = chunk)
+                        // 尝试获取页面内容
+                        val chunk = remember(page) {
+                            mutableStateOf<TextChunk?>(null)
+                        }
+                        
+                        // 如果为 null，等待并重新尝试获取
+                        LaunchedEffect(page) {
+                            var retryCount = 0
+                            while (chunk.value == null && retryCount < 50) {
+                                val pageContent = textManager.getPageSync(uri.toString(), page)
+                                if (pageContent != null) {
+                                    chunk.value = pageContent
+                                    break
+                                }
+                                delay(100)
+                                retryCount++
+                            }
+                            
+                            // 如果超时仍未获取到，使用空文本块
+                            if (chunk.value == null) {
+                                chunk.value = TextChunk("", false, page)
+                            }
+                        }
+                        
+                        // 显示内容（确保不为 null）
+                        val displayChunk = chunk.value ?: TextChunk("", false, page)
+                        PageContent(chunk = displayChunk)
                     }
                 }
             }
