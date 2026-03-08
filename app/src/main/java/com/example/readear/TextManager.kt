@@ -171,7 +171,7 @@ class TextManager(private val context: Context) {
      * @param avgCharsPerLine 每行平均字符数
      * @param maxLinesPerPage 每页最大行数
      */
-    suspend fun syncLoadPages(uri: Uri, fileType: FileType, avgCharsPerLine: Int, maxLinesPerPage: Int) {
+    suspend fun startLoadPages(uri: Uri, fileType: FileType, avgCharsPerLine: Int, maxLinesPerPage: Int) {
         val uriString = uri.toString()
         
         try {

@@ -9,7 +9,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -182,14 +181,14 @@ fun ContentScreen(
         try {
             // 1. 在后台启动协程执行 syncLoadPages，不阻塞当前协程
             launch(Dispatchers.IO) {
-                textManager.syncLoadPages(uri, fileType, layoutParams.avgCharsPerLine, layoutParams.maxLinesPerPage)
+                textManager.startLoadPages(uri, fileType, layoutParams.avgCharsPerLine, layoutParams.maxLinesPerPage)
             }
 
-            // 2. 尝试获取阅读进度（设置超时，避免无限等待）
+            // 3. 尝试获取阅读进度（设置超时，避免无限等待）
             var retryCount = 0
-            val maxRetryCount = 10 // 最多重试 50 次（5 秒）
+            var maxRetryCount = 10
             
-            while (lastReadingPage == null && !hasLoadedProgress && retryCount < maxRetryCount) {
+            while (lastReadingPage == null && retryCount < maxRetryCount) {
                 val progress = textManager.getLastReadPageNumber(uri.toString())
                 if (progress != null) {
                     lastReadingPage = progress
@@ -201,37 +200,63 @@ fun ContentScreen(
                 }
             }
 
-            // 3. 如果没有获取到进度，设置为 0（从第一页开始）
+            // 4. 如果没有获取到进度，设置为 0（从第一页开始）
             if (!hasLoadedProgress) {
                 lastReadingPage = 0
                 hasLoadedProgress = true
             }
 
-            // 4. 跳转到上次阅读位置
+            // 2. 等待 hasBook = true（有缓存对象）
+            retryCount = 0
+            maxRetryCount = 20
+            while (retryCount < maxRetryCount) {
+                delay(50)
+                val bookReady = textManager.hasBook(uri.toString())
+                if (bookReady) {
+                    hasBook = true
+                    break
+                }
+                delay(150)
+                retryCount++
+            }
+            // 尝试getPage
+            retryCount = 0
+            maxRetryCount = 20
+            while (retryCount < maxRetryCount) {
+                delay(50)
+                val pageContent = textManager.getPage(uri.toString(), lastReadingPage ?: 0)
+                if (pageContent != null) {
+                    val pagesCount = textManager.getPagesCount(uri.toString())
+                    if (pagesCount != null && pagesCount > 0) {
+                        totalPages = pagesCount
+                    }
+                    break
+                }
+                delay(150)
+                retryCount++
+            }
+            // 尝试totalPages
+            retryCount = 0
+            maxRetryCount = 20
+            while (retryCount < maxRetryCount) {
+                delay(50)
+                val pagesCount = textManager.getPagesCount(uri.toString())
+                if (pagesCount != null && pagesCount > 0) {
+                    totalPages = pagesCount
+                    break
+                }
+                delay(150)
+                retryCount++
+            }
+
+
+            // 6. 跳转到上次阅读位置
             if (lastReadingPage != null) {
                 pagerState.scrollToPage(lastReadingPage!!)
             }
 
         } catch (e: Exception) {
             errorMessage = "加载失败：${e.message}"
-        }
-    }
-
-    // 任务 1：监听 hasBook 状态变化（快速响应）
-    DisposableEffect(Unit) {
-        val hasBookJob = lifecycleScope.launch {
-            // 等待到有书为止
-            while (!textManager.hasBook(uri.toString())) {
-                delay(500)
-            }
-            
-            // 一旦有书，立即设置
-            hasBook = true
-            // ✅ 设置完成后立即退出
-        }
-
-        onDispose {
-            hasBookJob.cancel()
         }
     }
 
@@ -250,7 +275,7 @@ fun ContentScreen(
                 if (textManager.isBookCompleted(uri.toString())) {
                     break
                 }
-                delay(200)
+                delay(50)
             }
         }
 
@@ -384,7 +409,7 @@ fun ContentScreen(
                         // 如果为 null，等待并重新尝试获取
                         LaunchedEffect(page) {
                             var retryCount = 0
-                            val maxRetryCount = 30 // 减少重试次数，30 * 100ms = 3 秒
+                            val maxRetryCount = 200 // 减少重试次数，200 * 30ms = 6 秒
                             
                             while (chunk.value == null && retryCount < maxRetryCount) {
                                 val pageContent = textManager.getPage(uri.toString(), page)
@@ -392,7 +417,7 @@ fun ContentScreen(
                                     chunk.value = pageContent
                                     break
                                 }
-                                delay(100)
+                                delay(30)
                                 retryCount++
                             }
 
