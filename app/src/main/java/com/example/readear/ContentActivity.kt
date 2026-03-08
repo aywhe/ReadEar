@@ -17,7 +17,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -159,12 +158,8 @@ fun ContentScreen(
     // 上次阅读进度
     var lastReadingPage by remember { mutableStateOf<Int?>(null) }
     
-    // 新增：夜间模式
-    var isDarkTheme by remember { mutableStateOf(false) }
-    // 新增：全屏模式
+    // 全屏模式
     var isFullScreen by remember { mutableStateOf(false) }
-    // 新增：选项菜单
-    var showOptionsMenu by remember { mutableStateOf(false) }
 
     val pagerState = rememberPagerState(
         initialPage = 0,
@@ -245,7 +240,6 @@ fun ContentScreen(
         val pageCountJob = lifecycleScope.launch {
             // 持续检查，直到书籍加载完成
             while (true) {
-                delay(2000)
                 
                 val pagesCount = textManager.getPagesCount(uri.toString())
                 if (pagesCount != null && pagesCount > 0) {
@@ -256,6 +250,7 @@ fun ContentScreen(
                 if (textManager.isBookCompleted(uri.toString())) {
                     break
                 }
+                delay(200)
             }
         }
 
@@ -317,43 +312,18 @@ fun ContentScreen(
                     }
                 },
                 actions = {
-                    Box {
-                        // 修改：选项菜单按钮（三个点）
-                        IconButton(onClick = { showOptionsMenu = true }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "选项"
-                            )
-                        }
-                        
-                        DropdownMenu(
-                            expanded = showOptionsMenu,
-                            onDismissRequest = { showOptionsMenu = false }
-                        ) {
-                            // 进度显示子菜单
-                            DropdownMenuItem(
-                                text = { 
-                                    Text("${pagerState.currentPage + 1}/$totalPages 页") 
-                                },
-                                onClick = {
-                                    showOptionsMenu = false
-                                    showJumpDialog = true
-                                }
-                            )
-                            
-                            Divider()
-                            
-                            // 设置子菜单
-                            DropdownMenuItem(
-                                text = { Text("设置") },
-                                onClick = {
-                                    showOptionsMenu = false
-                                    // 这里可以打开设置对话框
-                                }
-                            )
-                        }
+                    // 新增：直接显示页码信息，点击跳转到指定页面
+                    TextButton(
+                        onClick = { showJumpDialog = true },
+                        modifier = Modifier.padding(end = 16.dp)
+                    ) {
+                        Text(
+                            text = "${pagerState.currentPage + 1}/$totalPages",
+                            style = MaterialTheme.typography.titleMedium
+                        )
                     }
                 }
+
             )
         }
     ) { innerPadding ->
@@ -361,7 +331,6 @@ fun ContentScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(if (isDarkTheme) Color.DarkGray else Color.White)
         ) {
             when {
                 // 有错误
@@ -437,7 +406,6 @@ fun ContentScreen(
                         val displayChunk = chunk.value ?: TextChunk("", false, page)
                         PageContent(
                             chunk = displayChunk,
-                            isDarkTheme = isDarkTheme,
                             onDoubleTap = {
                                 isFullScreen = !isFullScreen
                             },
@@ -469,7 +437,6 @@ fun ContentScreen(
 @Composable
 fun PageContent(
     chunk: TextChunk,
-    isDarkTheme: Boolean,
     onDoubleTap: () -> Unit,
     onLongPress: (String) -> Unit
 ) {
@@ -496,7 +463,7 @@ fun PageContent(
             style = MaterialTheme.typography.bodyLarge.copy(
                 fontSize = defaultFontSize,
                 lineHeight = baseLineHeight,
-                color = if (isDarkTheme) Color.LightGray else Color.Black
+                color = Color.Black
             ),
             lineHeight = scaledLineHeight,
             modifier = Modifier.fillMaxWidth()
@@ -645,46 +612,6 @@ private fun JumpToPageDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("取消")
-            }
-        }
-    )
-}
-
-@Composable
-private fun SettingsDialog(
-    isDarkTheme: Boolean,
-    onDismiss: () -> Unit,
-    onThemeToggle: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(text = "设置")
-        },
-        text = {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "夜间模式",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    
-                    IconButton(onClick = onThemeToggle) {
-                        Text(
-                            text = if (isDarkTheme) "☀️" else "🌙",
-                            fontSize = 24.sp
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = onDismiss) {
-                Text("关闭")
             }
         }
     )
