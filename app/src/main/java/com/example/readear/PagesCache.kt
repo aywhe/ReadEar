@@ -30,7 +30,13 @@ class PagesCache(val uri: String) {
      * @return 返回上次阅读的页码
      */
     fun getLastReadingPageNumber(): Int ? {
-        if (pages.isEmpty()) return null
+        if (pages.isEmpty()) {
+            return null
+        }else{
+            if (lastReadingPage == null) {
+                lastReadingPage = 0
+            }
+        }
         return lastReadingPage
     }
     

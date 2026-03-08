@@ -157,7 +157,7 @@ fun ContentScreen(
     val lifecycleScope = rememberCoroutineScope()
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var hasContent by remember { mutableStateOf(false) }
+    var hasBook by remember { mutableStateOf(false) }
     var totalPages by remember { mutableStateOf(0) }
     var loadedPages by remember { mutableStateOf<Map<Int, TextChunk>>(emptyMap()) }
 
@@ -194,11 +194,16 @@ fun ContentScreen(
     // 启动初始化：同步内存数据并恢复上次阅读位置
     LaunchedEffect(uri, fileType) {
         try {
-            // 1. 调用 syncLoadPages 同步内存数据
-            textManager.syncLoadPages(uri, fileType, layoutParams.avgCharsPerLine, layoutParams.maxLinesPerPage)
+            // 1. 在后台启动协程执行 syncLoadPages，不阻塞当前协程
+            launch(Dispatchers.IO) {
+                textManager.syncLoadPages(uri, fileType, layoutParams.avgCharsPerLine, layoutParams.maxLinesPerPage)
+            }
 
-            // 2. 等待获取到进度信息（可以是 0）
-            while (lastReadingPage == null && !hasLoadedProgress) {
+            // 2. 尝试获取阅读进度（设置超时，避免无限等待）
+            var retryCount = 0
+            val maxRetryCount = 50 // 最多重试 50 次（5 秒）
+            
+            while (lastReadingPage == null && !hasLoadedProgress && retryCount < maxRetryCount) {
                 val progress = textManager.getLastReadPageNumber(uri.toString())
                 if (progress != null) {
                     lastReadingPage = progress
@@ -206,20 +211,23 @@ fun ContentScreen(
                 } else {
                     // 等待一小段时间后重试
                     delay(100)
+                    retryCount++
                 }
             }
 
-            // 3. 跳转到上次阅读位置
+            // 3. 如果没有获取到进度，设置为 0（从第一页开始）
+            if (!hasLoadedProgress) {
+                lastReadingPage = 0
+                hasLoadedProgress = true
+            }
+
+            // 4. 跳转到上次阅读位置
             if (lastReadingPage != null) {
                 pagerState.scrollToPage(lastReadingPage!!)
             }
 
-            // 4. 更新总页数和内容状态
-            val pagesCount = textManager.getPagesCount(uri.toString())
-            if (pagesCount != null && pagesCount > 0) {
-                totalPages = pagesCount
-                hasContent = true
-            }
+            // 5. 检查是否有书籍缓存
+            hasBook = textManager.hasBook(uri.toString())
 
             isLoadingInitialData = false
 
@@ -229,9 +237,35 @@ fun ContentScreen(
         }
     }
 
+    // 新增：定时获取总页数，直到缓存完成
+    DisposableEffect(Unit) {
+        val getPageCountJob = lifecycleScope.launch {
+            while (true) {
+                delay(2000)
+                val pagesCount = textManager.getPagesCount(uri.toString())
+                if (pagesCount != null && pagesCount > 0) {
+                    totalPages = pagesCount
+                }
+                
+                // 检查是否已完成，如果完成则退出循环
+                val book = textManager.hasBook(uri.toString())
+                val memoryCache = com.example.readear.BooksCache.getCache(uri.toString())
+                val isCompleted = memoryCache?.isCompleted() ?: false
+                
+                if (isCompleted && pagesCount != null && pagesCount > 0) {
+                    break
+                }
+            }
+        }
+
+        onDispose {
+            getPageCountJob.cancel()
+        }
+    }
+
     // 监听页面变化，加载当前页面和预加载后续页面
     LaunchedEffect(pagerState.currentPage) {
-        if (!isLoadingInitialData && hasContent) {
+        if (!isLoadingInitialData && hasBook) {
             onPageChanged(pagerState.currentPage)
 
             // 预加载后续 5 页
@@ -255,7 +289,7 @@ fun ContentScreen(
         val autoSaveJob = lifecycleScope.launch {
             while (true) {
                 delay(60_000)
-                if (hasContent && !isLoadingInitialData) {
+                if (hasBook && !isLoadingInitialData) {
                     textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
                 }
             }
@@ -370,8 +404,8 @@ fun ContentScreen(
                     }
                 }
 
-                // 没有内容
-                !hasContent -> {
+                // 没有书籍缓存
+                !hasBook -> {
                     Text(
                         text = "文件中没有内容",
                         style = MaterialTheme.typography.bodyLarge,
