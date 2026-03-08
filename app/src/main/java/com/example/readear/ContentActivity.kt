@@ -150,28 +150,7 @@ fun ContentScreen(
     // 启动初始化：仅恢复上次阅读位置和检查是否有内容
     LaunchedEffect(uri, fileType) {
         try {
-            // 1. 获取上次阅读位置
-            val lastReadPage = textManager.getLastReadPageNumber(uri.toString())
-            
-            // 2. 检查是否有缓存内容
-            val hasCache = textManager.hasBook(uri.toString())
-
-            hasContent = hasCache
-            
-            if (hasContent) {
-                // 如果有内容，获取总页数
-                totalPages = textManager.getPagesCount(uri.toString()) ?: 0
-                
-                // 恢复到上次阅读位置（确保页码有效）
-                lastReadPage?.let { page ->
-                    if (page > 0 && page < totalPages) {
-                        pagerState.scrollToPage(page)
-                    }
-                }
-            } else {
-                // TODO: 没有缓存和数据库内容，需要提取文本
-                errorMessage = "文件内容尚未提取，请稍后再试"
-            }
+            pagerState.scrollToPage(0)
         } catch (e: Exception) {
             errorMessage = "加载失败：${e.message}"
         }
@@ -179,7 +158,7 @@ fun ContentScreen(
     
     // 监听页面变化，加载当前页面和预加载后续页面
     LaunchedEffect(pagerState.currentPage) {
-        if (hasContent) {
+        if (textManager.hasBook(uri.toString())) {
             onPageChanged(pagerState.currentPage)
 
             // 2. 预加载后续 5 页

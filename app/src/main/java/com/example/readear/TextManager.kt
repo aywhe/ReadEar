@@ -47,7 +47,19 @@ class TextManager(private val context: Context) {
      */
     suspend fun getLastReadPageNumber(uri: String): Int? {
         return withContext(Dispatchers.Default) {
-            pagesCacheManager.getCache(uri)?.getLastReadingPageNumber()
+            // 先尝试从内存缓存获取
+            var lastPage = pagesCacheManager.getCache(uri)?.getLastReadingPageNumber()
+            if (lastPage != null) {
+                return@withContext lastPage
+            } else {
+                // 内存缓存没有，再尝试从数据库获取
+                val cacheManager = CacheManager(context)
+                lastPage = cacheManager.loadReadingProgress(uri)
+                if (lastPage != null) {
+                    pagesCacheManager.getCache(uri)?.setLastReadingPageNumber(lastPage)
+                }
+                return@withContext lastPage                
+            }
         }
     }
 
@@ -74,8 +86,8 @@ class TextManager(private val context: Context) {
         return withContext(Dispatchers.Default) {
             var loadedCount = 0
             val cacheManager = CacheManager(context)  // ← 移到循环外
-            
-            for (pageNumber in startPage..endPage) {
+            val realEndPage = minOf(endPage, cacheManager.getMaxPageIndex(uri) ?: endPage)  // 确保不超过实际最大页码
+            for (pageNumber in startPage..realEndPage) {
                 // 检查是否已在内存缓存中
                 if (pagesCacheManager.getCache(uri)?.getPage(pageNumber) == null) {
                     // 不在内存缓存中，从数据库加载
@@ -146,6 +158,7 @@ class TextManager(private val context: Context) {
         data class Error(val message: String) : LoadResult()
     }
 
+
     /**
      * 异步提取原始文本并分页
      * 
@@ -161,11 +174,55 @@ class TextManager(private val context: Context) {
      * @see TextExtractor.extractTextRaw 底层文本提取
      * @see paginateText 文本分页处理
      */
-    suspend fun extractRawText(uri: Uri, fileType: FileType, avgCharsPerLine: Int, maxLinesPerPage: Int): Flow<TextChunk> {
+    private suspend fun extractTextFromFileThenSaveCache(uri: Uri, fileType: FileType, avgCharsPerLine: Int, maxLinesPerPage: Int, onlyUpdate: Boolean = true) = withContext(Dispatchers.IO) {
         // 没有缓存，从源文件提取并保存缓存
         val extractor = TextExtractorFactory.getExtractor(context, fileType)
         val rawTextFlow = extractor.extractTextRaw(uri)
-        return paginateText(rawTextFlow, avgCharsPerLine, maxLinesPerPage)
+        if(!pagesCacheManager.hasCache(uri.toString())) {
+            pagesCacheManager.setCache(uri.toString(), PagesCache(uri.toString()))
+        }
+        val cacheManager = CacheManager(context)
+        
+        var pageCount = 0
+        var lastPageIndex = 0
+        var totalWords = 0
+
+        paginateText(rawTextFlow, avgCharsPerLine, maxLinesPerPage).collect { textChunk ->
+            // 保存到内存缓存（直接添加，无需判断）
+            pagesCacheManager.getCache(uri.toString())?.addPage(textChunk)
+            
+            // 保存到数据库（Room 的 IGNORE 策略会自动处理重复）
+            cacheManager.savePage(
+                uri.toString(), 
+                Page(
+                    bookId = uri.toString(),
+                    pageNumber = textChunk.index,
+                    content = textChunk.content,
+                    index = textChunk.index
+                )
+            )
+            
+            pageCount++
+            lastPageIndex = textChunk.index
+            totalWords += textChunk.content.length
+            
+            // 每 100 页或最后一页时保存一次 book
+            if (pageCount % 100 == 0 || textChunk.isComplete) {
+                cacheManager.saveBook(Book(
+                    bookId = uri.toString(),
+                    title = uri.toString().substringAfterLast("/"),
+                    filePath = uri.toString(),
+                    totalWords = totalWords,
+                    totalPages = textChunk.index + 1,
+                    lastReadTime = System.currentTimeMillis()
+                ))
+            }
+            if(textChunk.isComplete){
+                // 标记缓存完成
+                pagesCacheManager.getCache(uri.toString())?.setCompleted(true)
+            }
+        }
+
     }
     /**
      * 将连续的文本流分割成适合显示的页面
@@ -174,7 +231,7 @@ class TextManager(private val context: Context) {
      * @param maxLinesPerPage 每页最大行数
      * @return 返回分页后的文本块 Flow
      */
-    suspend fun paginateText(
+    private suspend fun paginateText(
         textFlow: Flow<String>,
         avgCharsPerLine: Int,
         maxLinesPerPage: Int

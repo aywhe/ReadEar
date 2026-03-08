@@ -53,6 +53,8 @@ interface BookDao {
     
     @Query("SELECT COUNT(*) FROM pages WHERE bookId = :bookId")
     suspend fun getTotalPagesCount(bookId: String): Int
+    @Query("SELECT MAX(pageNumber) FROM pages WHERE bookId = :bookId")
+    suspend fun getMaxPageIndex(bookId: String): Int
     
     @Query("DELETE FROM pages WHERE bookId = :bookId")
     suspend fun deletePages(bookId: String)

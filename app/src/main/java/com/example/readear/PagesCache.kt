@@ -23,13 +23,14 @@ class PagesCache(val uri: String) {
     /**
      * 上次阅读的页码
      */
-    private var lastReadingPage: Int = 0
+    private var lastReadingPage: Int? = null
     
     /**
      * 获取上次阅读的页码
      * @return 返回上次阅读的页码
      */
-    fun getLastReadingPageNumber(): Int {
+    fun getLastReadingPageNumber(): Int ? {
+        if (pages.isEmpty()) return null
         return lastReadingPage
     }
     
@@ -76,6 +77,9 @@ class PagesCache(val uri: String) {
         pages[chunk.index] = chunk
     }
 
+    fun hasPage(pageNumber: Int): Boolean {
+        return pages.containsKey(pageNumber)
+    }
     
     /**
      * 获取指定页的内容

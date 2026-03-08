@@ -67,14 +67,16 @@ class CacheManager(private val context: Context) {
     // ==================== 页面操作 ====================
     
     /**
-     * 批量保存页面（异步）
-     * @param bookId 书籍 ID
-     * @param pages 页面列表
+     * 保存单个页面到数据库（异步）
+     * 
+     * 在后台线程中执行数据库插入操作，避免阻塞主线程。
+     * 使用 Room DAO 将页面对象持久化存储。
+     * 
+     * @param bookId 书籍 ID，用于标识所属的书籍
+     * @param page 页面对象，包含页面内容和元数据
      */
-    suspend fun savePages(bookId: String, pages: List<Page>) = withContext(Dispatchers.IO) {
-        pages.chunked(1000).forEach { batch ->
-            dao.insertPages(batch)
-        }
+    suspend fun savePage(bookId: String, page: Page) = withContext(Dispatchers.IO) {
+        dao.insertPage(page)
     }
     
     /**
@@ -85,6 +87,11 @@ class CacheManager(private val context: Context) {
      */
     suspend fun getPage(bookId: String, pageNumber: Int): Page? = withContext(Dispatchers.IO) {
         dao.getPage(bookId, pageNumber)
+    }
+
+    suspend fun hasPage(bookId: String, pageNumber: Int): Boolean = withContext(Dispatchers.IO) {
+        val page = dao.getPage(bookId, pageNumber)
+        page != null
     }
     
     /**
@@ -124,6 +131,9 @@ class CacheManager(private val context: Context) {
      */
     suspend fun getTotalPagesCount(bookId: String): Int = withContext(Dispatchers.IO) {
         dao.getTotalPagesCount(bookId)
+    }
+    suspend fun getMaxPageIndex(bookId: String): Int = withContext(Dispatchers.IO) {
+        dao.getMaxPageIndex(bookId)
     }
     
     // ==================== 阅读进度操作 ====================

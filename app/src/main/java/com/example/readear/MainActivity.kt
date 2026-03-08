@@ -160,12 +160,8 @@ class MainActivity : ComponentActivity() {
     private fun clearBookData(fileUri: String) {
         kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                // 1. 清除内存缓存
-                BooksCache.clearCache(fileUri)
-                
-                // 2. 清除数据库数据
-                val cacheManager = CacheManager(applicationContext)
-                cacheManager.deleteBook(fileUri)
+                val textManager = TextManager(applicationContext)
+                textManager.delBook(fileUri)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
