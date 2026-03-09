@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -53,9 +54,9 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     // TTS 相关
     private var textToSpeech: TextToSpeech? = null
-    private var isSpeaking = false
+    private var isSpeaking by mutableStateOf(false)
     private var currentTextToSpeak = ""
-    private var isTTSAvailable = false
+    private var isTTSAvailable by mutableStateOf(false)
 
     // 当前阅读页码
     private var currentPageNumber: Int = 0
@@ -65,6 +66,24 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         if (status == TextToSpeech.SUCCESS) {
             Log.d("ContentActivity", "TTS 初始化成功")
             isTTSAvailable = true
+
+            // 设置 TTS 完成监听器
+            textToSpeech?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    Log.d("ContentActivity", "TTS 开始播放：$utteranceId")
+                }
+
+                override fun onDone(utteranceId: String?) {
+                    Log.d("ContentActivity", "TTS 播放完成：$utteranceId")
+                    // 播放完成后重置状态
+                    isSpeaking = false
+                }
+
+                override fun onError(utteranceId: String?) {
+                    Log.e("ContentActivity", "TTS 播放错误：$utteranceId")
+                    isSpeaking = false
+                }
+            })
         } else {
             val errorMessage = when (status) {
                 -1 -> "TTS 通用错误"
@@ -144,6 +163,7 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         if (text.isNotEmpty()) {
             currentTextToSpeak = text
             Log.d("ContentActivity", "开始播放文本：${text.length} 字符")
+            
             textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
             isSpeaking = true
         } else {
