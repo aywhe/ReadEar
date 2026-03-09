@@ -22,7 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -71,17 +71,22 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             textToSpeech?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     Log.d("ContentActivity", "TTS 开始播放：$utteranceId")
+                    // isSpeaking = true // speak没触发到这里
                 }
 
                 override fun onDone(utteranceId: String?) {
                     Log.d("ContentActivity", "TTS 播放完成：$utteranceId")
                     // 播放完成后重置状态
-                    isSpeaking = false
+                    //isSpeaking = false// speak没触发到这里
                 }
 
                 override fun onError(utteranceId: String?) {
                     Log.e("ContentActivity", "TTS 播放错误：$utteranceId")
-                    isSpeaking = false
+                    //isSpeaking = false// speak没触发到这里
+                }
+                override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                    Log.d("ContentActivity", "TTS 停止播放：$utteranceId, 是否中断：$interrupted")
+                    //isSpeaking = false// speak没触发到这里
                 }
             })
         } else {
@@ -141,16 +146,16 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun playText(text: String) {
-        if (isSpeaking) {
-            stopSpeaking()
-            return
-        }
+        //if (isSpeaking) {
+        //    stopSpeaking()
+        //    return
+        //}
 
         // 检查 TTS 是否可用
         if (textToSpeech == null) {
             Log.w("ContentActivity", "TTS 尚未初始化，尝试重新初始化")
             textToSpeech = TextToSpeech(this, this)
-            //Toast.makeText(this, "正在初始化 TTS...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "正在初始化 TTS...", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -165,7 +170,7 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             Log.d("ContentActivity", "开始播放文本：${text.length} 字符")
             
             textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
-            isSpeaking = true
+            isSpeaking = true // 在overider的onStart回调中设置不会触发
         } else {
             Log.w("ContentActivity", "播放内容为空")
         }
@@ -173,7 +178,7 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun stopSpeaking() {
         textToSpeech?.stop()
-        isSpeaking = false
+        isSpeaking = false // 在overider的onStop回调中设置不会触发
     }
 
     /**
@@ -206,17 +211,19 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     override fun onPause() {
         super.onPause()
         //saveReadingProgress()
-        if (isSpeaking) {
-            stopSpeaking()
-        }
+        // 播放不自动暂停，只能手动暂停直至播放结束
+        //if (isSpeaking) {
+        //    stopSpeaking()
+        //}
     }
 
     override fun onStop() {
         super.onStop()
         //saveReadingProgress()
-        if (isSpeaking) {
-            stopSpeaking()
-        }
+        // 播放不自动暂停，只能手动暂停直至播放结束
+        //if (isSpeaking) {
+        //    stopSpeaking()
+        //}
     }
 
     override fun onDestroy() {
@@ -331,6 +338,9 @@ fun ContentScreen(
     // 全屏模式
     var isFullScreen by remember { mutableStateOf(false) }
 
+    // 当前播放语音的页面索引
+    var currentSpeakingPage by remember { mutableIntStateOf(0) }
+
     val pagerState = rememberPagerState(
         initialPage = 0,
         pageCount = { totalPages }
@@ -426,11 +436,23 @@ fun ContentScreen(
             // 不用预加载前一页，即使回退就从数据库中获取把
         }
     }
+
     LaunchedEffect(totalPages, lastReadingPage) {
         // 恢复上次阅读位置（如果有）
         if ((!hasRestoredLastReading) && totalPages > 0 && lastReadingPage != null) {
             pagerState.scrollToPage(lastReadingPage!!)
             hasRestoredLastReading = true
+        }
+    }
+
+    LaunchedEffect(isSpeaking){
+        if(isSpeaking){
+            if(currentSpeakingPage != pagerState.currentPage){
+                pagerState.scrollToPage(currentSpeakingPage)
+            }
+        }else{
+            // 停止播放时更新当前播放页面为当前显示的页面
+            currentSpeakingPage = pagerState.currentPage
         }
     }
 
@@ -606,6 +628,8 @@ fun ContentScreen(
                             lifecycleScope.launch {
                                 val currentPageContent = textManager.getPage(uri.toString(), pagerState.currentPage)
                                 if (currentPageContent != null) {
+                                    // 更新当前播放页面为当前显示的页面
+                                    currentSpeakingPage = pagerState.currentPage
                                     onPlayText(currentPageContent.content)
                                 } else {
                                     Toast.makeText(context, "当前页面内容为空", Toast.LENGTH_SHORT).show()
@@ -863,7 +887,7 @@ fun DraggablePlayButton(
             shape = CircleShape
         ) {
             Icon(
-                imageVector = if (isSpeaking) Icons.Default.Pause else Icons.Default.PlayArrow,
+                imageVector = if (isSpeaking) Icons.Default.Stop else Icons.Default.PlayArrow,
                 contentDescription = if (isSpeaking) "暂停" else "播放",
                 modifier = Modifier.size(24.dp)
             )
