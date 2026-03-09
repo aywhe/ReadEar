@@ -55,27 +55,48 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var textToSpeech: TextToSpeech? = null
     private var isSpeaking = false
     private var currentTextToSpeak = ""
+    private var isTTSAvailable = false
 
     // 当前阅读页码
     private var currentPageNumber: Int = 0
 
     override fun onInit(status: Int) {
+        Log.d("ContentActivity", "TTS 初始化状态：$status")
         if (status == TextToSpeech.SUCCESS) {
+            Log.d("ContentActivity", "TTS 初始化成功，设置语言")
             val result = textToSpeech?.setLanguage(Locale.CHINA) ?: TextToSpeech.LANG_MISSING_DATA
+            Log.d("ContentActivity", "语言设置结果：$result")
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 Toast.makeText(this, "不支持该语言", Toast.LENGTH_SHORT).show()
+                Log.e("ContentActivity", "TTS 语言不支持：$result")
+            } else {
+                Log.d("ContentActivity", "TTS 语言设置成功")
+                isTTSAvailable = true
             }
         } else {
-            Toast.makeText(this, "TTS 初始化失败", Toast.LENGTH_SHORT).show()
+            val errorMessage = when (status) {
+                -1 -> "TTS 通用错误"
+                2 -> "TTS 忙"
+                3 -> "客户端错误"
+                4 -> "资源不足"
+                5 -> "语言数据缺失"
+                6 -> "网络错误"
+                7 -> "网络超时"
+                8 -> "TTS 引擎未安装完成"
+                9 -> "不支持的语言"
+                else -> "未知错误：$status"
+            }
+            Log.e("ContentActivity", "TTS 初始化失败：$errorMessage (状态码：$status)")
+            Toast.makeText(this, "TTS 初始化失败：$errorMessage", Toast.LENGTH_LONG).show()
+            
+            // 提示用户检查 TTS 设置
+            //showTTSSettingsDialog()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        // 初始化 TTS
-        textToSpeech = TextToSpeech(this, this)
 
         val fileUriString = intent.getStringExtra(EXTRA_FILE_URI) ?: ""
         val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "未知文件"
@@ -84,6 +105,13 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         // 获取 URI 并请求持久化读取权限
         val fileUri = fileUriString.toUri()
         ensurePersistedUriPermission(fileUri)
+
+        // 延迟初始化 TTS，避免在 onCreate 中立即初始化导致失败
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+            delay(500) // 延迟 500ms 初始化
+            Log.d("ContentActivity", "开始初始化 TTS")
+            textToSpeech = TextToSpeech(this@ContentActivity, this@ContentActivity)
+        }
 
         setContent {
             ReadEarTheme {
@@ -107,10 +135,27 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             return
         }
 
-        if (textToSpeech != null && text.isNotEmpty()) {
+        // 检查 TTS 是否可用
+        if (textToSpeech == null) {
+            Log.w("ContentActivity", "TTS 尚未初始化，尝试重新初始化")
+            textToSpeech = TextToSpeech(this, this)
+            Toast.makeText(this, "正在初始化 TTS...", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (!isTTSAvailable) {
+            Log.w("ContentActivity", "TTS 不可用，请检查设置")
+            showTTSSettingsDialog()
+            return
+        }
+
+        if (text.isNotEmpty()) {
             currentTextToSpeak = text
+            Log.d("ContentActivity", "开始播放文本：${text.length} 字符")
             textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
             isSpeaking = true
+        } else {
+            Log.w("ContentActivity", "播放内容为空")
         }
     }
 
@@ -169,9 +214,12 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         releasePersistedUriPermission()
         
         // 释放 TTS 资源
+        Log.d("ContentActivity", "释放 TTS 资源")
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
+        isSpeaking = false
+        isTTSAvailable = false
     }
 
     private fun saveReadingProgress() {
@@ -216,6 +264,28 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             }
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    private fun showTTSSettingsDialog() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("TTS 引擎不可用")
+            .setMessage("请安装或启用文本转语音引擎。\n\n路径：设置 > 辅助功能 > 文字转语音输出")
+            .setPositiveButton("前往设置") { _, _ ->
+                openTTSSettings()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun openTTSSettings() {
+        try {
+            val intent = android.content.Intent("com.android.settings.TTS_SETTINGS")
+            intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e("ContentActivity", "无法打开 TTS 设置：${e.message}")
+            Toast.makeText(this, "无法打开设置，请手动前往", Toast.LENGTH_SHORT).show()
         }
     }
 }
