@@ -4,19 +4,24 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +31,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.readear.ui.theme.ReadEarTheme
@@ -35,8 +41,9 @@ import kotlinx.coroutines.launch
 import androidx.core.net.toUri
 import com.example.readear.parser.TextChunk
 import com.example.readear.parser.TextManager
+import java.util.Locale
 
-class ContentActivity : ComponentActivity() {
+class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     companion object {
         const val EXTRA_FILE_URI = "extra_file_uri"
@@ -44,12 +51,31 @@ class ContentActivity : ComponentActivity() {
         const val EXTRA_FILE_TYPE = "extra_file_type"
     }
 
+    // TTS 相关
+    private var textToSpeech: TextToSpeech? = null
+    private var isSpeaking = false
+    private var currentTextToSpeak = ""
+
     // 当前阅读页码
     private var currentPageNumber: Int = 0
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            val result = textToSpeech?.setLanguage(Locale.CHINA) ?: TextToSpeech.LANG_MISSING_DATA
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Toast.makeText(this, "不支持该语言", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(this, "TTS 初始化失败", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // 初始化 TTS
+        textToSpeech = TextToSpeech(this, this)
 
         val fileUriString = intent.getStringExtra(EXTRA_FILE_URI) ?: ""
         val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "未知文件"
@@ -66,10 +92,31 @@ class ContentActivity : ComponentActivity() {
                     fileName = fileName,
                     fileType = fileType,
                     onNavigateBack = { finish() },
-                    onPageChanged = { page -> currentPageNumber = page }
+                    onPageChanged = { page -> currentPageNumber = page },
+                    onPlayText = { text -> playText(text) },
+                    onStopSpeaking = { stopSpeaking() },
+                    isSpeaking = isSpeaking
                 )
             }
         }
+    }
+
+    private fun playText(text: String) {
+        if (isSpeaking) {
+            stopSpeaking()
+            return
+        }
+
+        if (textToSpeech != null && text.isNotEmpty()) {
+            currentTextToSpeak = text
+            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+            isSpeaking = true
+        }
+    }
+
+    private fun stopSpeaking() {
+        textToSpeech?.stop()
+        isSpeaking = false
     }
 
     /**
@@ -102,11 +149,17 @@ class ContentActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         //saveReadingProgress()
+        if (isSpeaking) {
+            stopSpeaking()
+        }
     }
 
     override fun onStop() {
         super.onStop()
         //saveReadingProgress()
+        if (isSpeaking) {
+            stopSpeaking()
+        }
     }
 
     override fun onDestroy() {
@@ -114,6 +167,11 @@ class ContentActivity : ComponentActivity() {
         // 释放 URI 权限（可选，根据需求决定）
         saveReadingProgress()
         releasePersistedUriPermission()
+        
+        // 释放 TTS 资源
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        textToSpeech = null
     }
 
     private fun saveReadingProgress() {
@@ -169,7 +227,10 @@ fun ContentScreen(
     fileName: String,
     fileType: FileType,
     onNavigateBack: () -> Unit,
-    onPageChanged: (Int) -> Unit = {}
+    onPageChanged: (Int) -> Unit = {},
+    onPlayText: (String) -> Unit = {},
+    onStopSpeaking: () -> Unit = {},
+    isSpeaking: Boolean = false
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -452,6 +513,25 @@ fun ContentScreen(
                             )
                         }
                     }
+                    
+                    // 添加可拖动的播放按钮
+                    DraggablePlayButton(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp),
+                        isSpeaking = isSpeaking,
+                        onClick = {
+                            lifecycleScope.launch {
+                                val currentPageContent = textManager.getPage(uri.toString(), pagerState.currentPage)
+                                if (currentPageContent != null) {
+                                    onPlayText(currentPageContent.content)
+                                } else {
+                                    Toast.makeText(context, "当前页面内容为空", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onStop = { onStopSpeaking() }
+                    )
                 }
                 else -> {
                         Text(
@@ -661,4 +741,50 @@ private fun JumpToPageDialog(
             }
         }
     )
+}
+
+@Composable
+fun DraggablePlayButton(
+    modifier: Modifier = Modifier,
+    isSpeaking: Boolean = false,
+    onClick: () -> Unit = {},
+    onStop: () -> Unit = {}
+) {
+    var offset by remember { mutableStateOf(IntOffset.Zero) }
+
+    Box(modifier = modifier) {
+        FloatingActionButton(
+            onClick = {
+                if (isSpeaking) {
+                    onStop()
+                } else {
+                    onClick()
+                }
+            },
+            containerColor = if (isSpeaking) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            contentColor = Color.White,
+            modifier = Modifier
+                .offset { offset }
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragStart = { },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            offset += IntOffset(
+                                dragAmount.x.toInt(),
+                                dragAmount.y.toInt()
+                            )
+                        }
+                    )
+                }
+                .size(56.dp),
+            shape = CircleShape
+        ) {
+            Icon(
+                imageVector = if (isSpeaking) Icons.Default.Pause else Icons.Default.PlayArrow,
+                contentDescription = if (isSpeaking) "暂停" else "播放",
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
 }
