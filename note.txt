@@ -8,3 +8,8 @@ override fun onInit(status: Int) {
         <action android:name="android.intent.action.TTS_SERVICE" />
     </intent>
 </queries>
+- textToSpeech的回调函数不会触发，比如下面的onStart、onDone、onError等
+textToSpeech?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                  override fun onStart(utteranceId: String?) {...}
+解决办法： https://blog.csdn.net/u010555997/article/details/50926570
+speak第四个参数不要是null，就可以触发了。

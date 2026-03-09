@@ -55,6 +55,7 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     // TTS 相关
     private var textToSpeech: TextToSpeech? = null
     private var isSpeaking by mutableStateOf(false)
+    private var isPlayDone by mutableStateOf(false)
     private var currentTextToSpeak = ""
     private var isTTSAvailable by mutableStateOf(false)
 
@@ -71,22 +72,24 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             textToSpeech?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     Log.d("ContentActivity", "TTS 开始播放：$utteranceId")
-                    // isSpeaking = true // speak没触发到这里
+                    isPlayDone = false
+                    isSpeaking = true
                 }
 
                 override fun onDone(utteranceId: String?) {
                     Log.d("ContentActivity", "TTS 播放完成：$utteranceId")
                     // 播放完成后重置状态
-                    //isSpeaking = false// speak没触发到这里
+                    isPlayDone = true
+                    isSpeaking = false
                 }
 
                 override fun onError(utteranceId: String?) {
                     Log.e("ContentActivity", "TTS 播放错误：$utteranceId")
-                    //isSpeaking = false// speak没触发到这里
+                    isSpeaking = false
                 }
                 override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                    Log.d("ContentActivity", "TTS 停止播放：$utteranceId, 是否中断：$interrupted")
-                    //isSpeaking = false// speak没触发到这里
+                    Log.d("ContentActivity", "TTS 停止播放：$utteranceId")
+                    isSpeaking = false
                 }
             })
         } else {
@@ -139,7 +142,8 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     onPageChanged = { page -> currentPageNumber = page },
                     onPlayText = { text -> playText(text) },
                     onStopSpeaking = { stopSpeaking() },
-                    isSpeaking = isSpeaking
+                    isSpeaking = isSpeaking,
+                    isPlayDone = isPlayDone
                 )
             }
         }
@@ -169,8 +173,8 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             currentTextToSpeak = text
             Log.d("ContentActivity", "开始播放文本：${text.length} 字符")
             
-            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
-            isSpeaking = true // 在overider的onStart回调中设置不会触发
+            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "utteranceId")
+            //isSpeaking = true // 在overider的onStart回调中设置
         } else {
             Log.w("ContentActivity", "播放内容为空")
         }
@@ -178,7 +182,7 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun stopSpeaking() {
         textToSpeech?.stop()
-        isSpeaking = false // 在overider的onStop回调中设置不会触发
+        //isSpeaking = false // 在overider的onStop回调中设置
     }
 
     /**
@@ -319,7 +323,8 @@ fun ContentScreen(
     onPageChanged: (Int) -> Unit = {},
     onPlayText: (String) -> Unit = {},
     onStopSpeaking: () -> Unit = {},
-    isSpeaking: Boolean = false
+    isSpeaking: Boolean = false,
+    isPlayDone: Boolean = false
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -444,6 +449,16 @@ fun ContentScreen(
             hasRestoredLastReading = true
         }
     }
+    LaunchedEffect(isPlayDone){
+        if(isPlayDone){
+            // 播放完成后自动跳转到下一页
+            val nextPageContent = textManager.getPage(uri.toString(), currentSpeakingPage + 1)
+            if (nextPageContent != null) {
+                currentSpeakingPage++
+                onPlayText(nextPageContent.content)
+            }
+        }
+    }
 
     LaunchedEffect(isSpeaking){
         if(isSpeaking){
@@ -451,8 +466,9 @@ fun ContentScreen(
                 pagerState.scrollToPage(currentSpeakingPage)
             }
         }else{
+            // 这样会导致自动播放时跳转错误
             // 停止播放时更新当前播放页面为当前显示的页面
-            currentSpeakingPage = pagerState.currentPage
+            // currentSpeakingPage = pagerState.currentPage
         }
     }
 
