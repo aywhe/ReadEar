@@ -342,18 +342,8 @@ fun ContentScreen(
                     }
                 }
 
-                // 没有书籍缓存
-                totalPages <= 0 -> {
-                    Text(
-                        text = "文件中没有内容",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-
                 // 正常显示内容
-                else -> {
+                totalPages > 0 && lastReadingPage != null -> {
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
@@ -384,19 +374,27 @@ fun ContentScreen(
                                 chunk.value = TextChunk("", false, page)
                             }
                         }
-
-                        // 显示内容（确保不为 null）
-                        val displayChunk = chunk.value ?: TextChunk("", false, page)
-                        PageContent(
-                            chunk = displayChunk,
-                            onDoubleTap = {
-                                isFullScreen = !isFullScreen
-                            },
-                            onLongPress = { selectedText ->
-                                showTextSelectionMenu(context, selectedText)
-                            }
-                        )
+                        chunk.value?.let { displayChunk ->
+                            // 显示内容（确保不为 null）
+                            PageContent(
+                                chunk = displayChunk,
+                                onDoubleTap = {
+                                    isFullScreen = !isFullScreen
+                                },
+                                onLongPress = { selectedText ->
+                                    showTextSelectionMenu(context, selectedText)
+                                }
+                            )
+                        }
                     }
+                }
+                else -> {
+                        Text(
+                            text = "正在加载内容...",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
                 }
             }
         }
