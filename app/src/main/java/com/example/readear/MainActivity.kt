@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
             }
             
             val fileInfo = getFileInfoFromUri(it)
-            Toast.makeText(this, "选择了文件：${fileInfo.fileName}", Toast.LENGTH_SHORT).show()
+            //Toast.makeText(this, "选择了文件：${fileInfo.fileName}", Toast.LENGTH_SHORT).show()
             
             val newFileItem = FileItem(
                 fileName = fileInfo.fileName,

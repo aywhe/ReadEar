@@ -67,7 +67,7 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             val result = textToSpeech?.setLanguage(Locale.CHINA) ?: TextToSpeech.LANG_MISSING_DATA
             Log.d("ContentActivity", "语言设置结果：$result")
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Toast.makeText(this, "不支持该语言", Toast.LENGTH_SHORT).show()
+                //Toast.makeText(this, "不支持该语言", Toast.LENGTH_SHORT).show()
                 Log.e("ContentActivity", "TTS 语言不支持：$result")
             } else {
                 Log.d("ContentActivity", "TTS 语言设置成功")
@@ -87,7 +87,7 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 else -> "未知错误：$status"
             }
             Log.e("ContentActivity", "TTS 初始化失败：$errorMessage (状态码：$status)")
-            Toast.makeText(this, "TTS 初始化失败：$errorMessage", Toast.LENGTH_LONG).show()
+            //Toast.makeText(this, "TTS 初始化失败：$errorMessage", Toast.LENGTH_LONG).show()
             
             // 提示用户检查 TTS 设置
             //showTTSSettingsDialog()
@@ -139,7 +139,7 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         if (textToSpeech == null) {
             Log.w("ContentActivity", "TTS 尚未初始化，尝试重新初始化")
             textToSpeech = TextToSpeech(this, this)
-            Toast.makeText(this, "正在初始化 TTS...", Toast.LENGTH_SHORT).show()
+            //Toast.makeText(this, "正在初始化 TTS...", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -285,7 +285,7 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             startActivity(intent)
         } catch (e: Exception) {
             Log.e("ContentActivity", "无法打开 TTS 设置：${e.message}")
-            Toast.makeText(this, "无法打开设置，请手动前往", Toast.LENGTH_SHORT).show()
+            //Toast.makeText(this, "无法打开设置，请手动前往", Toast.LENGTH_SHORT).show()
         }
     }
 }
