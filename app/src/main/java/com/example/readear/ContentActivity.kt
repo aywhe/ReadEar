@@ -50,6 +50,9 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         const val EXTRA_FILE_URI = "extra_file_uri"
         const val EXTRA_FILE_NAME = "extra_file_name"
         const val EXTRA_FILE_TYPE = "extra_file_type"
+        
+        // 新增：用于追踪当前正在播放的页面
+        var currentPlayingPage: Int = -1
     }
 
     // TTS 相关
@@ -57,6 +60,9 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private var isSpeaking by mutableStateOf(false)
     private var currentTextToSpeak = ""
     private var isTTSAvailable by mutableStateOf(false)
+    
+    // 新增：用于标记是否是用户手动暂停
+    private var isManuallyPaused by mutableStateOf(false)
 
     // 当前阅读页码
     private var currentPageNumber: Int = 0
@@ -77,11 +83,14 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     Log.d("ContentActivity", "TTS 播放完成：$utteranceId")
                     // 播放完成后重置状态
                     isSpeaking = false
+                    // 重置手动暂停标记
+                    isManuallyPaused = false
                 }
 
                 override fun onError(utteranceId: String?) {
                     Log.e("ContentActivity", "TTS 播放错误：$utteranceId")
                     isSpeaking = false
+                    isManuallyPaused = false
                 }
             })
         } else {
@@ -132,15 +141,16 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     fileType = fileType,
                     onNavigateBack = { finish() },
                     onPageChanged = { page -> currentPageNumber = page },
-                    onPlayText = { text -> playText(text) },
+                    onPlayText = { text, page -> playText(text, page) },
                     onStopSpeaking = { stopSpeaking() },
-                    isSpeaking = isSpeaking
+                    isSpeaking = isSpeaking,
+                    isManuallyPaused = isManuallyPaused
                 )
             }
         }
     }
 
-    private fun playText(text: String) {
+    private fun playText(text: String, pageNumber: Int) {
         if (isSpeaking) {
             stopSpeaking()
             return
@@ -162,7 +172,11 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         if (text.isNotEmpty()) {
             currentTextToSpeak = text
-            Log.d("ContentActivity", "开始播放文本：${text.length} 字符")
+            currentPlayingPage = pageNumber
+            Log.d("ContentActivity", "开始播放页面 $pageNumber 的文本：${text.length} 字符")
+            
+            // 重置手动暂停标记
+            isManuallyPaused = false
             
             textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
             isSpeaking = true
@@ -174,6 +188,9 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     private fun stopSpeaking() {
         textToSpeech?.stop()
         isSpeaking = false
+        // 标记为用户手动暂停
+        isManuallyPaused = true
+        Log.d("ContentActivity", "用户手动暂停播放")
     }
 
     /**
@@ -310,9 +327,10 @@ fun ContentScreen(
     fileType: FileType,
     onNavigateBack: () -> Unit,
     onPageChanged: (Int) -> Unit = {},
-    onPlayText: (String) -> Unit = {},
+    onPlayText: (String, Int) -> Unit = { _, _ -> },
     onStopSpeaking: () -> Unit = {},
-    isSpeaking: Boolean = false
+    isSpeaking: Boolean = false,
+    isManuallyPaused: Boolean = false
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -347,6 +365,8 @@ fun ContentScreen(
     // TextManager 实例（使用 remember 避免重复创建）
     val textManager = remember(context) { TextManager(context.applicationContext as Context) }
 
+    // 新增：记住当前正在播放的页面
+    var currentPlayingPage by remember { mutableStateOf<Int?>(null) }
 
     // 启动初始化：同步内存数据并恢复上次阅读位置
     LaunchedEffect(uri, fileType) {
@@ -453,6 +473,55 @@ fun ContentScreen(
                 Log.d("ContentActivity", "保存进度：${pagerState.currentPage}")
                 textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
             }
+        }
+    }
+    
+    // 监听 TTS 播放完成，自动播放下一页
+    LaunchedEffect(isSpeaking, isManuallyPaused) {
+        // 当 isSpeaking 变为 false 且不是用户手动暂停时，说明是页面内容自然播放完成
+        if (!isSpeaking && !isManuallyPaused && currentPlayingPage != null && totalPages > 0) {
+            val playedPage = currentPlayingPage ?: return@LaunchedEffect
+            val currentPage = pagerState.currentPage
+            
+            Log.d("ContentActivity", "页面内容自然播放完成：已播放页面=$playedPage, 当前显示页面=$currentPage")
+            
+            // 检查当前播放的页面是否就是当前显示的页面
+            if (playedPage == currentPage) {
+                // 是当前显示的页面，继续播放下一页并自动翻页
+                val nextPage = playedPage + 1
+                if (nextPage < totalPages) {
+                    Log.d("ContentActivity", "自动切换到下一页并播放：$nextPage")
+                    
+                    // 先滚动到下一页
+                    pagerState.animateScrollToPage(nextPage)
+                    
+                    // 等待一小段时间确保页面滚动完成
+                    delay(300)
+                    
+                    // 获取下一页内容并播放
+                    val nextPageContent = textManager.getPage(uri.toString(), nextPage)
+                    if (nextPageContent != null && nextPageContent.content.isNotEmpty()) {
+                        onPlayText(nextPageContent.content, nextPage)
+                    } else {
+                        Log.w("ContentActivity", "下一页内容为空：$nextPage")
+                    }
+                } else {
+                    Log.d("ContentActivity", "已经是最后一页，停止播放")
+                }
+            } else {
+                // 不是当前显示的页面，说明用户已经手动滑动了
+                // 只播放当前显示的页面的内容，不自动翻页
+                Log.d("ContentActivity", "用户已手动切换页面，播放当前页面内容：$currentPage")
+                
+                val currentPageContent = textManager.getPage(uri.toString(), currentPage)
+                if (currentPageContent != null && currentPageContent.content.isNotEmpty()) {
+                    onPlayText(currentPageContent.content, currentPage)
+                } else {
+                    Log.w("ContentActivity", "当前页面内容为空：$currentPage")
+                }
+            }
+        } else if (!isSpeaking && isManuallyPaused) {
+            Log.d("ContentActivity", "用户手动暂停，不自动播放下一页")
         }
     }
 
@@ -604,11 +673,17 @@ fun ContentScreen(
                         isSpeaking = isSpeaking,
                         onClick = {
                             lifecycleScope.launch {
-                                val currentPageContent = textManager.getPage(uri.toString(), pagerState.currentPage)
-                                if (currentPageContent != null) {
-                                    onPlayText(currentPageContent.content)
+                                if (isSpeaking) {
+                                    // 正在播放，点击则暂停
+                                    onStopSpeaking()
                                 } else {
-                                    Toast.makeText(context, "当前页面内容为空", Toast.LENGTH_SHORT).show()
+                                    // 否则开始播放当前页面
+                                    val currentPageContent = textManager.getPage(uri.toString(), pagerState.currentPage)
+                                    if (currentPageContent != null && currentPageContent.content.isNotEmpty()) {
+                                        onPlayText(currentPageContent.content, pagerState.currentPage)
+                                    } else {
+                                        Toast.makeText(context, "当前页面内容为空", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             }
                         },
