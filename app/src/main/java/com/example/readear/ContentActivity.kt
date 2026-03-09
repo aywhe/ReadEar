@@ -44,6 +44,9 @@ class ContentActivity : ComponentActivity() {
 
     // 当前阅读页码
     private var currentPageNumber: Int = 0
+    
+    // 当前书籍 URI
+    private var currentBookId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,10 +67,19 @@ class ContentActivity : ComponentActivity() {
                     fileName = fileName,
                     fileType = fileType,
                     onNavigateBack = { finish() },
-                    onPageChanged = { page -> currentPageNumber = page }
+                    onPageChanged = { page -> 
+                        currentPageNumber = page
+                        onPlayerPageChanged(page)
+                    }
                 )
             }
         }
+        
+        // 保存当前书籍 ID
+        currentBookId = fileUriString
+        
+        // 监听播放状态变化，当播放到当前书的其他页面时，自动切换
+        setupPlaybackListener()
     }
 
     /**
@@ -112,6 +124,52 @@ class ContentActivity : ComponentActivity() {
         // 释放 URI 权限（可选，根据需求决定）
         saveReadingProgress()
         releasePersistedUriPermission()
+        
+        // 清除播放状态监听
+        AudioPlaybackService.onPlaybackStateChanged = null
+        AudioPlaybackService.onPageChanged = null
+    }
+    
+    /**
+     * 设置播放状态监听
+     */
+    private fun setupPlaybackListener() {
+        AudioPlaybackService.onPlaybackStateChanged = { isPlaying ->
+            Log.d("ContentActivity", "🎵 播放状态变化：$isPlaying")
+            // 可以在这里更新 UI 状态
+        }
+        
+        AudioPlaybackService.onPageChanged = { bookId, pageNumber ->
+            Log.d("ContentActivity", "📄 播放页面变化：书籍=$bookId, 页码=${pageNumber + 1}")
+            
+            // 如果是当前正在查看的书，自动切换到播放的页面
+            if (bookId == currentBookId) {
+                // 注意：这里无法直接控制 pagerState，因为它是 Composable 内的
+                // 需要通过某种方式通知 ContentScreen
+                Log.d("ContentActivity", "➡️ 自动切换到播放页面：${pageNumber + 1}")
+                // TODO: 实现页面切换逻辑
+            }
+        }
+    }
+    
+    /**
+     * 当播放器页面变化时调用
+     */
+    private fun onPlayerPageChanged(pageNumber: Int) {
+        // 如果当前不在播放，更新播放进度
+        if (!AudioPlaybackService.isPlaying()) {
+            currentBookId?.let { bookId ->
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    try {
+                        val progressManager = PlaybackProgressManager.getInstance(this@ContentActivity)
+                        progressManager.savePlaybackProgress(bookId, pageNumber)
+                        Log.d("ContentActivity", "💾 保存浏览进度：页码 ${pageNumber + 1}")
+                    } catch (e: Exception) {
+                        Log.e("ContentActivity", "❌ 保存进度失败：${e.message}", e)
+                    }
+                }
+            }
+        }
     }
 
     private fun saveReadingProgress() {
@@ -192,6 +250,9 @@ fun ContentScreen(
     )
 
     var showJumpDialog by remember { mutableStateOf(false) }
+    
+    // 新增：用于接收外部页面切换请求
+    var targetPageToScroll by remember { mutableStateOf<Int?>(null) }
 
     val layoutParams by remember(context) {
         derivedStateOf {
@@ -268,6 +329,33 @@ fun ContentScreen(
         }
     }
 
+    // 监听外部页面切换请求
+    LaunchedEffect(targetPageToScroll) {
+        targetPageToScroll?.let { page ->
+            if (page in 0 until totalPages) {
+                pagerState.animateScrollToPage(page)
+                Log.d("ContentScreen", "➡️ 已切换到播放页面：${page + 1}")
+            }
+            targetPageToScroll = null // 重置
+        }
+    }
+    
+    // 监听播放页面变化
+    DisposableEffect(uri) {
+        val pageChangeListener: (String, Int) -> Unit = { bookId, pageNumber ->
+            // 如果是当前书，切换到播放的页面
+            if (bookId == uri.toString()) {
+                targetPageToScroll = pageNumber
+            }
+        }
+        
+        AudioPlaybackService.onPageChanged = pageChangeListener
+        
+        onDispose {
+            AudioPlaybackService.onPageChanged = null
+        }
+    }
+    
     // 监听页面变化，加载当前页面和预加载后续页面
     LaunchedEffect(pagerState.currentPage) {
         if (textManager.hasBook(uri.toString())) {
@@ -460,6 +548,12 @@ fun ContentScreen(
                         )
                 }
             }
+            
+            // 全局悬浮播放按钮
+            GlobalPlayButton(
+                modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd)
+                    .padding(16.dp)
+            )
         }
     }
 

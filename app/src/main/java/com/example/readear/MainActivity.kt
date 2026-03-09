@@ -1,6 +1,11 @@
 package com.example.readear
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import android.util.Log
+import androidx.compose.foundation.layout.BoxScope
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -79,6 +84,7 @@ class MainActivity : ComponentActivity() {
 
     private var fileList by mutableStateOf<List<FileItem>>(emptyList())
     private lateinit var fileRepository: FileRepository
+    private lateinit var playbackProgressManager: PlaybackProgressManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,6 +97,14 @@ class MainActivity : ComponentActivity() {
         screenHeightPx = metrics.heightPixels
         
         fileRepository = FileRepository(applicationContext)
+        playbackProgressManager = PlaybackProgressManager.getInstance(applicationContext)
+        
+        // 请求通知权限（Android 13+）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+            }
+        }
         
         setContent {
             ReadEarTheme {
@@ -110,11 +124,10 @@ class MainActivity : ComponentActivity() {
                                 openContentActivity(file)
                             }
                         )
-                        DraggableFloatingButton(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(16.dp),
-                            onClick = { openSystemFilePicker() }
+                        // 全局悬浮播放按钮
+                        GlobalPlayButton(
+                            modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd)
+                                .padding(16.dp)
                         )
                     }
                 }
@@ -123,6 +136,7 @@ class MainActivity : ComponentActivity() {
         
         // 异步恢复数据
         restoreFileList()
+        // 播放按钮的初始化已在 Application 中完成
     }
 
     private fun openSystemFilePicker() {
@@ -163,6 +177,12 @@ class MainActivity : ComponentActivity() {
                 val textManager = TextManager(applicationContext)
                 textManager.delBook(fileUri)
                 
+                // 删除播放历史
+                val playbackProgressManager = PlaybackProgressManager.getInstance(applicationContext)
+                playbackProgressManager.deletePlaybackProgress(fileUri)
+                
+                Log.d("MainActivity", "🗑️ 已删除书籍及其播放历史：$fileUri")
+                
                 // 释放 URI 权限
                 try {
                     val uri = Uri.parse(fileUri)
@@ -174,7 +194,7 @@ class MainActivity : ComponentActivity() {
                     // 忽略异常，可能权限本来就不存在
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("MainActivity", "❌ 删除书籍失败：${e.message}", e)
             }
         }
     }
