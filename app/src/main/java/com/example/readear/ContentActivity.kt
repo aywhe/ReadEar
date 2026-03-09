@@ -99,18 +99,42 @@ class ContentActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        //saveReadingProgress()
     }
 
     override fun onStop() {
         super.onStop()
+        //saveReadingProgress()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         // 释放 URI 权限（可选，根据需求决定）
+        saveReadingProgress()
         releasePersistedUriPermission()
     }
-    
+
+    private fun saveReadingProgress() {
+        val fileUriString = intent.getStringExtra(EXTRA_FILE_URI) ?: return
+        
+        if (currentPageNumber >= 0) {
+            Log.d("ContentActivity", "💾 保存进度：页码 ${currentPageNumber + 1}, URI: $fileUriString")
+            
+            // 使用协程在后台线程执行保存操作
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                try {
+                    // 方案 1：在 Activity 中创建独立的 TextManager 实例，用于保存进度
+                    val textManager = TextManager(applicationContext)
+                    textManager.saveReadingProgress(fileUriString, currentPageNumber)
+                    Log.d("ContentActivity", "✅ 进度保存成功")
+                } catch (e: Exception) {
+                    Log.e("ContentActivity", "❌ 保存进度失败：${e.message}", e)
+                }
+            }
+        } else {
+            Log.w("ContentActivity", "⚠️ 跳过保存：currentPageNumber = $currentPageNumber")
+        }
+    }
     /**
      * 释放持久化 URI 权限（如果需要的话）
      */
@@ -232,6 +256,7 @@ fun ContentScreen(
 
                 // 完成后退出
                 if (textManager.isBookCompleted(uri.toString())) {
+                    Log.d("ContentActivity", "书籍页数获取完成，总页数：$totalPages")
                     break
                 }
                 delay(10)
@@ -248,10 +273,11 @@ fun ContentScreen(
         if (textManager.hasBook(uri.toString())) {
             onPageChanged(pagerState.currentPage)
 
+            // 取消预加载
             // 预加载后续 1 页
-            lifecycleScope.launch {
-                textManager.preloadPagesRange(uri.toString(), pagerState.currentPage, pagerState.currentPage + 1)
-            }
+//            lifecycleScope.launch {
+//                textManager.PagesRange(uri.toString(), pagerState.currentPage, pagerState.currentPage + 1)
+//            }
             // 不用预加载前一页，即使回退就从数据库中获取把
         }
     }
@@ -269,6 +295,7 @@ fun ContentScreen(
             while (true) {
                 delay(60_000)
                 if (textManager.hasBook(uri.toString())) {
+                    Log.d("ContentActivity", "保存进度：${pagerState.currentPage}")
                     textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
                 }
             }
@@ -278,6 +305,7 @@ fun ContentScreen(
             // 取消定时任务并立即保存一次
             autoSaveJob.cancel()
             lifecycleScope.launch {
+                Log.d("ContentActivity", "保存进度：${pagerState.currentPage}")
                 textManager.saveReadingProgress(uri.toString(), pagerState.currentPage)
             }
         }
@@ -373,7 +401,7 @@ fun ContentScreen(
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
-                        beyondViewportPageCount = Int.MAX_VALUE
+                        beyondViewportPageCount = 10//Int.MAX_VALUE
                     ) { page ->
                         // 尝试获取页面内容
                         val chunk = remember(page) {
@@ -383,25 +411,21 @@ fun ContentScreen(
                         // 如果为 null，等待并重新尝试获取
                         LaunchedEffect(page) {
                             var retryCount = 0
-                            val maxRetryCount = 200 // 减少重试次数，200 * 30ms = 6 秒
+                            val maxRetryCount = 50
+                            
+                            Log.d("ContentActivity", "开始加载页面 $page")
                             
                             while (chunk.value == null && retryCount < maxRetryCount) {
+                                val startTime = System.currentTimeMillis()
                                 val pageContent = textManager.getPage(uri.toString(), page)
+                                val loadTime = System.currentTimeMillis() - startTime
 
                                 if (pageContent != null) {
                                     chunk.value = pageContent
-//                                    Log.d("ContentActivity", "✓ 成功获取到页面内容")
-//                                    Log.d("ContentActivity", "HorizontalPager page index: $page")
-//                                    Log.d("ContentActivity", "totalPages: ${totalPages}")
-//                                    Log.d("ContentActivity", "TextChunk.index: ${pageContent.index}")
-//                                    Log.d("ContentActivity", "TextChunk.content length: ${pageContent.content.length}")
-//                                    Log.d("ContentActivity", "TextChunk.isCompleted: ${pageContent.isCompleted}")
-//                                    Log.d("ContentActivity", "预览内容：${pageContent.content.take(50)}...")
+                                    Log.d("ContentActivity", "✓ 成功加载页面 $page，耗时：${loadTime}ms")
                                     break
                                 } else {
-//                                    Log.d("ContentActivity", "✗ 未获取到页面内容 (retry: ${retryCount + 1}/$maxRetryCount)")
-//                                    Log.d("ContentActivity", "HorizontalPager page index: $page")
-//                                    Log.d("ContentActivity", "totalPages: ${totalPages}")
+                                    Log.d("ContentActivity", "✗ 未获取到页面 $page (retry: ${retryCount + 1}/$maxRetryCount)，耗时：${loadTime}ms")
                                 }
                                 delay(30)
                                 retryCount++
@@ -409,7 +433,7 @@ fun ContentScreen(
 
                             // 如果超时仍未获取到，使用空文本块
                             if (chunk.value == null) {
-                                Log.e("ContentActivity", "⚠ 超时未获取到页面，创建空文本块")
+                                Log.e("ContentActivity", "⚠ 超时未获取到页面 $page，创建空文本块")
                                 chunk.value = TextChunk("", false, page)
                             }
                         }

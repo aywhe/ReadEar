@@ -1,9 +1,9 @@
 package com.example.readear
 
-import kotlin.collections.mutableMapOf
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 文本页面缓存数据类
+ * 文本页面缓存数据类（线程安全版本）
  * 
  * 存储单个文件的所有页面信息，包括：
  * - URI 标识
@@ -17,8 +17,9 @@ class PagesCache(val uri: String) {
 
     /**
      * 所有页面的列表（索引即页码，从 0 开始）
+     * 使用 ConcurrentHashMap 保证线程安全
      */
-    private val pages = mutableMapOf<Int, TextChunk>()
+    private val pages = ConcurrentHashMap<Int, TextChunk>()
     
     /**
      * 上次阅读的页码

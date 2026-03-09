@@ -77,10 +77,15 @@ class CacheCoordinator(
             try {
                 val page = cacheManager.getPage(uri, pageNumber)
                 if (page != null) {
-                    // 加载到内存缓存
+                    // 确保内存缓存存在
                     val newCache = ensureMemoryCacheExists(uri)
-                    newCache.addPage(TextChunk(page.content, page.isCompleted, page.pageNumber))
-                    return@withContext TextChunk(page.content, page.isCompleted, page.pageNumber)
+                    
+                    // 双重检查：可能在等待期间已经被其他协程添加了
+                    if (!newCache.hasPage(pageNumber)) {
+                        newCache.addPage(TextChunk(page.content, page.isCompleted, page.pageNumber))
+                    }
+                    
+                    return@withContext newCache.getPage(pageNumber)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
