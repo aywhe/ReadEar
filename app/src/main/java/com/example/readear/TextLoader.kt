@@ -97,7 +97,7 @@ private class TextPaginator(
                 TextChunk(
                     content = currentContent.toString(),
                     isCompleted = true,
-                    index = getNextIndex()
+                    index = getCurrentIndex()
                 )
             )
         }
@@ -123,7 +123,7 @@ private class TextPaginator(
                 TextChunk(
                     content = pageText + "\n",
                     isCompleted = false,
-                    index = getNextIndex()
+                    index = getCurrentIndex()
                 )
             )
             incrementIndex()
@@ -141,7 +141,7 @@ private class TextPaginator(
                 TextChunk(
                     content = currentContent.toString(),
                     isCompleted = false,
-                    index = getNextIndex()
+                    index = getCurrentIndex()
                 )
             )
             incrementIndex()
@@ -163,7 +163,7 @@ private class TextPaginator(
                     TextChunk(
                         content = pageText + "\n",
                         isCompleted = false,
-                        index = getNextIndex()
+                        index = getCurrentIndex()
                     )
                 )
                 incrementIndex()
@@ -193,7 +193,7 @@ private class TextPaginator(
                         TextChunk(
                             content = pageText + "\n",
                             isCompleted = false,
-                            index = getNextIndex()
+                            index = getCurrentIndex()
                         )
                     )
                     incrementIndex()
@@ -213,8 +213,9 @@ private class TextPaginator(
         currentLines += calculateLinesNeeded(line)
     }
     
-    private fun getNextIndex(): Int {
-        return if (index > 0) index + 1 else 1
+    private fun getCurrentIndex(): Int {
+        //return if (index > 0) index + 1 else 0
+        return index
     }
     
     private fun incrementIndex() {

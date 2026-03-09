@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -155,6 +156,9 @@ fun ContentScreen(
     var lastReadingPage by remember { mutableStateOf<Int?>(null) }
     var hasRestoredLastReading by remember { mutableStateOf(false) }
 
+    // 新增：是否正在初始化
+    var isInitializing by remember { mutableStateOf(true) }
+
     // 全屏模式
     var isFullScreen by remember { mutableStateOf(false) }
 
@@ -189,6 +193,7 @@ fun ContentScreen(
             }
         } catch (e: Exception) {
             errorMessage = "初始化失败：${e.message}"
+            isInitializing = false
         }
             // 1. 尝试获取阅读进度（设置超时，避免无限等待）
         var retryCount = 0
@@ -200,7 +205,7 @@ fun ContentScreen(
                 lastReadingPage = progress
                 hasLoadedProgress = true
             } else {
-                delay(100)
+                delay(10)
                 retryCount++
             }
         }
@@ -209,13 +214,16 @@ fun ContentScreen(
         if (!hasLoadedProgress) {
             lastReadingPage = 0
         }
+
+        // 标记初始化完成
+        isInitializing = false
     }
     // 任务 2：持续更新 totalPages（后台运行）
     DisposableEffect(Unit) {
         val pageCountJob = lifecycleScope.launch {
             // 持续检查，直到书籍加载完成
             while (true) {
-                delay(50)
+                delay(10)
 
                 val pagesCount = textManager.getPagesCount(uri.toString())
                 if (pagesCount != null && pagesCount > 0) {
@@ -226,7 +234,7 @@ fun ContentScreen(
                 if (textManager.isBookCompleted(uri.toString())) {
                     break
                 }
-                delay(150)
+                delay(10)
             }
         }
 
@@ -342,8 +350,26 @@ fun ContentScreen(
                     }
                 }
 
-                // 正常显示内容
-                totalPages > 0 && lastReadingPage != null -> {
+                // 正在初始化
+                isInitializing -> {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "正在加载内容...",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // 正常显示内容（修改条件：只要 lastReadingPage != null 即可）
+                lastReadingPage != null -> {
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
@@ -361,9 +387,21 @@ fun ContentScreen(
                             
                             while (chunk.value == null && retryCount < maxRetryCount) {
                                 val pageContent = textManager.getPage(uri.toString(), page)
+
                                 if (pageContent != null) {
                                     chunk.value = pageContent
+//                                    Log.d("ContentActivity", "✓ 成功获取到页面内容")
+//                                    Log.d("ContentActivity", "HorizontalPager page index: $page")
+//                                    Log.d("ContentActivity", "totalPages: ${totalPages}")
+//                                    Log.d("ContentActivity", "TextChunk.index: ${pageContent.index}")
+//                                    Log.d("ContentActivity", "TextChunk.content length: ${pageContent.content.length}")
+//                                    Log.d("ContentActivity", "TextChunk.isCompleted: ${pageContent.isCompleted}")
+//                                    Log.d("ContentActivity", "预览内容：${pageContent.content.take(50)}...")
                                     break
+                                } else {
+//                                    Log.d("ContentActivity", "✗ 未获取到页面内容 (retry: ${retryCount + 1}/$maxRetryCount)")
+//                                    Log.d("ContentActivity", "HorizontalPager page index: $page")
+//                                    Log.d("ContentActivity", "totalPages: ${totalPages}")
                                 }
                                 delay(30)
                                 retryCount++
@@ -371,6 +409,7 @@ fun ContentScreen(
 
                             // 如果超时仍未获取到，使用空文本块
                             if (chunk.value == null) {
+                                Log.e("ContentActivity", "⚠ 超时未获取到页面，创建空文本块")
                                 chunk.value = TextChunk("", false, page)
                             }
                         }
@@ -390,7 +429,7 @@ fun ContentScreen(
                 }
                 else -> {
                         Text(
-                            text = "正在加载内容...",
+                            text = "文件夹没有内容",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.align(Alignment.Center)

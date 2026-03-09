@@ -129,20 +129,26 @@ class CacheCoordinator(
     suspend fun loadAllPagesToMemory(uri: String): Int {
         return withContext(Dispatchers.Default) {
             val memoryCache = ensureMemoryCacheExists(uri)
-            
+
+            var startTime = System.currentTimeMillis()
             val allPages = try {
                 cacheManager.getAllPages(uri)
             } catch (e: Exception) {
                 e.printStackTrace()
                 emptyList()
             }
-            
+            var totalTime = System.currentTimeMillis() - startTime
+            android.util.Log.d("CacheCoordinator", "从数据库中加载所有页面耗时：${totalTime}ms, 页面数：${allPages.size}, URI: $uri")
+
+            startTime = System.currentTimeMillis()
             allPages.forEach { page ->
                 memoryCache.addPage(
                     TextChunk(page.content, page.isCompleted, page.pageNumber)
                 )
             }
-            
+            totalTime = System.currentTimeMillis() - startTime
+            android.util.Log.d("CacheCoordinator", "转换所有页面耗时：${totalTime}ms, 页面数：${allPages.size}, URI: $uri")
+
             val book = try {
                 cacheManager.getBook(uri)
             } catch (e: Exception) {
