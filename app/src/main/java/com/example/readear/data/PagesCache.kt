@@ -1,5 +1,6 @@
-package com.example.readear
+package com.example.readear.data
 
+import com.example.readear.parser.TextChunk
 import java.util.concurrent.ConcurrentHashMap
 
 /**

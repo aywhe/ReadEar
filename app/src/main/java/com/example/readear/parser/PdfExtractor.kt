@@ -1,4 +1,4 @@
-package com.example.readear
+package com.example.readear.parser
 
 import android.content.Context
 import android.net.Uri
@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import org.apache.pdfbox.pdmodel.PDDocument
+import org.apache.pdfbox.text.PDFTextStripper
 import java.io.InputStream
 
 /**
@@ -27,7 +28,7 @@ class PdfExtractor(private val context: Context) : TextExtractor {
                 val numberOfPages = document.numberOfPages
                 
                 for (i in 1..numberOfPages) {
-                    val pdfTextStripper = org.apache.pdfbox.text.PDFTextStripper()
+                    val pdfTextStripper = PDFTextStripper()
                     pdfTextStripper.startPage = i
                     pdfTextStripper.endPage = i
                     val text = pdfTextStripper.getText(document)

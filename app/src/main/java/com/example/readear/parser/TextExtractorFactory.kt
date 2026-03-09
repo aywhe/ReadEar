@@ -1,7 +1,7 @@
-package com.example.readear
+package com.example.readear.parser
 
 import android.content.Context
-import android.net.Uri
+import com.example.readear.FileType
 
 /**
  * 文本提取器工厂

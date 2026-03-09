@@ -33,6 +33,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.core.net.toUri
+import com.example.readear.parser.TextChunk
+import com.example.readear.parser.TextManager
 
 class ContentActivity : ComponentActivity() {
 

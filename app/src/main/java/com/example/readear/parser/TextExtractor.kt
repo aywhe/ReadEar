@@ -1,4 +1,4 @@
-package com.example.readear
+package com.example.readear.parser
 
 import android.net.Uri
 import kotlinx.coroutines.flow.Flow

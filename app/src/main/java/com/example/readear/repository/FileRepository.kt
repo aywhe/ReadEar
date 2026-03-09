@@ -1,4 +1,4 @@
-package com.example.readear
+package com.example.readear.repository
 
 import android.content.Context
 import androidx.datastore.core.DataStore
@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.readear.FileItem
+import com.example.readear.FileType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

@@ -1,4 +1,4 @@
-package com.example.readear
+package com.example.readear.parser
 
 import android.content.Context
 import android.net.Uri
@@ -10,10 +10,9 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 /**
- * Word 文件文本提取器
- * 注意：目前仅支持简单的文本读取，完整的 Word 格式支持需要 Apache POI 库
+ * TXT 文件文本提取器
  */
-class WordExtractor(private val context: Context) : TextExtractor {
+class TxtExtractor(private val context: Context) : TextExtractor {
     
     override fun extractTextRaw(uri: Uri): Flow<String> = flow {
         try {

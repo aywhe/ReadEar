@@ -1,6 +1,7 @@
 package com.example.readear
 
 import android.app.Application
+import com.example.readear.data.BooksCache
 
 /**
  * 全局 Application 类

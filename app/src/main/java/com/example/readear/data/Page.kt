@@ -1,4 +1,4 @@
-package com.example.readear
+package com.example.readear.data
 
 import androidx.room.Entity
 import androidx.room.Index

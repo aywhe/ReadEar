@@ -1,4 +1,4 @@
-package com.example.readear
+package com.example.readear.data
 
 import android.content.Context
 import androidx.room.Database

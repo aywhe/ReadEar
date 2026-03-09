@@ -1,10 +1,17 @@
-package com.example.readear
+package com.example.readear.parser
 
 import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.util.Log
+import com.example.readear.FileType
+import com.example.readear.data.Book
+import com.example.readear.data.BooksCache
+import com.example.readear.data.CacheCoordinator
+import com.example.readear.data.CacheManager
+import com.example.readear.data.Page
+import com.example.readear.data.PagesCache
 
 /**
  * 文本加载状态
@@ -208,9 +215,9 @@ class TextManager(private val context: Context) {
      * 异步提取文本并保存缓存（增强错误处理）
      */
     private suspend fun extractTextFromFileAndSaveCache(
-        uri: Uri, 
-        fileType: FileType, 
-        avgCharsPerLine: Int, 
+        uri: Uri,
+        fileType: FileType,
+        avgCharsPerLine: Int,
         maxLinesPerPage: Int
     ) = withContext(Dispatchers.IO) {
         val uriString = uri.toString()

@@ -1,6 +1,7 @@
-package com.example.readear
+package com.example.readear.data
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -163,7 +164,7 @@ class CacheManager(private val context: Context) {
                 dao.insertBook(book.copy(lastReadTime = System.currentTimeMillis()))
             }
         } catch (e: Exception) {
-            android.util.Log.e("CacheManager", "更新书籍最后阅读时间失败：${e.message}", e)
+            Log.e("CacheManager", "更新书籍最后阅读时间失败：${e.message}", e)
         }
     }
     

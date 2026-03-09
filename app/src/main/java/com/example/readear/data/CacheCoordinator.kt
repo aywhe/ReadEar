@@ -1,6 +1,8 @@
-package com.example.readear
+package com.example.readear.data
 
 import android.content.Context
+import android.util.Log
+import com.example.readear.parser.TextChunk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -143,7 +145,7 @@ class CacheCoordinator(
                 emptyList()
             }
             var totalTime = System.currentTimeMillis() - startTime
-            android.util.Log.d("CacheCoordinator", "从数据库中加载所有页面耗时：${totalTime}ms, 页面数：${allPages.size}, URI: $uri")
+            Log.d("CacheCoordinator", "从数据库中加载所有页面耗时：${totalTime}ms, 页面数：${allPages.size}, URI: $uri")
 
             startTime = System.currentTimeMillis()
             allPages.forEach { page ->
@@ -152,7 +154,7 @@ class CacheCoordinator(
                 )
             }
             totalTime = System.currentTimeMillis() - startTime
-            android.util.Log.d("CacheCoordinator", "转换所有页面耗时：${totalTime}ms, 页面数：${allPages.size}, URI: $uri")
+            Log.d("CacheCoordinator", "转换所有页面耗时：${totalTime}ms, 页面数：${allPages.size}, URI: $uri")
 
             val book = try {
                 cacheManager.getBook(uri)

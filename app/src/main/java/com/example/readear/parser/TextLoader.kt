@@ -1,10 +1,12 @@
-package com.example.readear
+package com.example.readear.parser
 
 import android.net.Uri
+import com.example.readear.FileType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.flow
+import kotlin.math.ceil
 
 /**
  * 文本加载器
@@ -107,7 +109,7 @@ private class TextPaginator(
         return if (line.isEmpty()) {
             1
         } else {
-            kotlin.math.ceil(line.length.toDouble() / avgCharsPerLine).toInt()
+            ceil(line.length.toDouble() / avgCharsPerLine).toInt()
         }
     }
     
