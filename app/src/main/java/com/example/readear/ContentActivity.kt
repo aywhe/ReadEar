@@ -4,13 +4,12 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -42,9 +41,9 @@ import kotlinx.coroutines.launch
 import androidx.core.net.toUri
 import com.example.readear.parser.TextChunk
 import com.example.readear.parser.TextManager
-import java.util.Locale
+import com.example.readear.parser.DefaultTextToSpeech
 
-class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
+class ContentActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_FILE_URI = "extra_file_uri"
@@ -53,7 +52,7 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     // TTS 相关
-    private var textToSpeech: TextToSpeech? = null
+    private var speechManager: DefaultTextToSpeech? = null
     private var isSpeaking by mutableStateOf(false)
     private var isPlayDone by mutableStateOf(false)
     private var currentTextToSpeak = ""
@@ -61,57 +60,6 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     // 当前阅读页码
     private var currentPageNumber: Int = 0
-
-    override fun onInit(status: Int) {
-        Log.d("ContentActivity", "TTS 初始化状态：$status")
-        if (status == TextToSpeech.SUCCESS) {
-            Log.d("ContentActivity", "TTS 初始化成功")
-            isTTSAvailable = true
-
-            // 设置 TTS 完成监听器
-            textToSpeech?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) {
-                    Log.d("ContentActivity", "TTS 开始播放：$utteranceId")
-                    isPlayDone = false
-                    isSpeaking = true
-                }
-
-                override fun onDone(utteranceId: String?) {
-                    Log.d("ContentActivity", "TTS 播放完成：$utteranceId")
-                    // 播放完成后重置状态
-                    isPlayDone = true
-                    isSpeaking = false
-                }
-
-                override fun onError(utteranceId: String?) {
-                    Log.e("ContentActivity", "TTS 播放错误：$utteranceId")
-                    isSpeaking = false
-                }
-                override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                    Log.d("ContentActivity", "TTS 停止播放：$utteranceId")
-                    isSpeaking = false
-                }
-            })
-        } else {
-            val errorMessage = when (status) {
-                -1 -> "TTS 通用错误"
-                2 -> "TTS 忙"
-                3 -> "客户端错误"
-                4 -> "资源不足"
-                5 -> "语言数据缺失"
-                6 -> "网络错误"
-                7 -> "网络超时"
-                8 -> "TTS 引擎未安装完成"
-                9 -> "不支持的语言"
-                else -> "未知错误：$status"
-            }
-            Log.e("ContentActivity", "TTS 初始化失败：$errorMessage (状态码：$status)")
-            //Toast.makeText(this, "TTS 初始化失败：$errorMessage", Toast.LENGTH_LONG).show()
-            
-            // 提示用户检查 TTS 设置
-            //showTTSSettingsDialog()
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -125,11 +73,16 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         val fileUri = fileUriString.toUri()
         ensurePersistedUriPermission(fileUri)
 
+        // 初始化 TTS 管理器
+        speechManager = DefaultTextToSpeech.getInstance(this)
+        
+        // 监听 TTS 状态变化
+        observeTTSState()
+
         // 延迟初始化 TTS，避免在 onCreate 中立即初始化导致失败
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
             delay(100) // 延迟 100ms 初始化
-            Log.d("ContentActivity", "开始初始化 TTS")
-            textToSpeech = TextToSpeech(this@ContentActivity, this@ContentActivity)
+            Log.d("ContentActivity", "TTS 已就绪")
         }
 
         setContent {
@@ -149,40 +102,52 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun playText(text: String) {
-        //if (isSpeaking) {
-        //    stopSpeaking()
-        //    return
-        //}
-
-        // 检查 TTS 是否可用
-        if (textToSpeech == null) {
-            Log.w("ContentActivity", "TTS 尚未初始化，尝试重新初始化")
-            textToSpeech = TextToSpeech(this, this)
-            Toast.makeText(this, "正在初始化 TTS...", Toast.LENGTH_SHORT).show()
-            return
+    private fun observeTTSState() {
+        lifecycleScope.launch {
+            launch {
+                speechManager?.isSpeaking?.collect { speaking ->
+                    isSpeaking = speaking
+                    Log.d("ContentActivity", "TTS 状态更新：isSpeaking=$speaking")
+                }
+            }
+            launch {
+                speechManager?.isPlayDone?.collect { done ->
+                    isPlayDone = done
+                    Log.d("ContentActivity", "TTS 状态更新：isPlayDone=$done")
+                }
+            }
+            launch {
+                speechManager?.isTTSAvailable?.collect { available ->
+                    isTTSAvailable = available
+                    Log.d("ContentActivity", "TTS 状态更新：isTTSAvailable=$available")
+                }
+            }
         }
-
-        if (!isTTSAvailable) {
-            Log.w("ContentActivity", "TTS 不可用，请检查设置")
+        
+        // 设置错误回调
+        speechManager?.onTTSError = { error ->
+            Log.e("ContentActivity", "TTS 错误：$error")
             showTTSSettingsDialog()
-            return
         }
+    }
 
+    private fun playText(text: String) {
         if (text.isNotEmpty()) {
             currentTextToSpeak = text
             Log.d("ContentActivity", "开始播放文本：${text.length} 字符")
             
-            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "utteranceId")
-            //isSpeaking = true // 在overider的onStart回调中设置
+            val success = speechManager?.playText(text)
+            if (success == false) {
+                Log.w("ContentActivity", "播放失败，TTS 可能未就绪")
+                Toast.makeText(this, "TTS 未就绪，请稍后再试", Toast.LENGTH_SHORT).show()
+            }
         } else {
             Log.w("ContentActivity", "播放内容为空")
         }
     }
 
     private fun stopSpeaking() {
-        textToSpeech?.stop()
-        //isSpeaking = false // 在overider的onStop回调中设置
+        speechManager?.stopSpeaking()
     }
 
     /**
@@ -236,11 +201,9 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         saveReadingProgress()
         releasePersistedUriPermission()
         
-        // 释放 TTS 资源
-        Log.d("ContentActivity", "释放 TTS 资源")
-        textToSpeech?.stop()
-        textToSpeech?.shutdown()
-        textToSpeech = null
+        // 释放 TTS 资源（注意：不释放单例，只重置状态）
+        speechManager?.stopSpeaking()
+        speechManager = null
         isSpeaking = false
         isTTSAvailable = false
     }
@@ -257,13 +220,13 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     // 方案 1：在 Activity 中创建独立的 TextManager 实例，用于保存进度
                     val textManager = TextManager(applicationContext)
                     textManager.saveReadingProgress(fileUriString, currentPageNumber)
-                    Log.d("ContentActivity", "✅ 进度保存成功")
+                    Log.d("ContentActivity", "进度保存成功")
                 } catch (e: Exception) {
-                    Log.e("ContentActivity", "❌ 保存进度失败：${e.message}", e)
+                    Log.e("ContentActivity", "保存进度失败：${e.message}", e)
                 }
             }
         } else {
-            Log.w("ContentActivity", "⚠️ 跳过保存：currentPageNumber = $currentPageNumber")
+            Log.w("ContentActivity", "跳过保存：currentPageNumber = $currentPageNumber")
         }
     }
     /**
@@ -295,21 +258,10 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
             .setTitle("TTS 引擎不可用")
             .setMessage("请安装或启用文本转语音引擎。\n\n路径：设置 > 辅助功能 > 文字转语音输出")
             .setPositiveButton("前往设置") { _, _ ->
-                openTTSSettings()
+                speechManager?.openTTSSettings(this)
             }
             .setNegativeButton("取消", null)
             .show()
-    }
-
-    private fun openTTSSettings() {
-        try {
-            val intent = android.content.Intent("com.android.settings.TTS_SETTINGS")
-            intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-            startActivity(intent)
-        } catch (e: Exception) {
-            Log.e("ContentActivity", "无法打开 TTS 设置：${e.message}")
-            //Toast.makeText(this, "无法打开设置，请手动前往", Toast.LENGTH_SHORT).show()
-        }
     }
 }
 
