@@ -149,14 +149,12 @@ fun ContentScreen(
     val lifecycleScope = rememberCoroutineScope()
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var hasBook by remember { mutableStateOf(false) }
-    var totalPages by remember { mutableStateOf(0) }
-    var loadedPages by remember { mutableStateOf<Map<Int, TextChunk>>(emptyMap()) }
+    var totalPages by remember { mutableIntStateOf(0) }
 
-    var hasLoadedProgress by remember { mutableStateOf(false) }
     // 上次阅读进度
     var lastReadingPage by remember { mutableStateOf<Int?>(null) }
-    
+    var hasRestoredLastReading by remember { mutableStateOf(false) }
+
     // 全屏模式
     var isFullScreen by remember { mutableStateOf(false) }
 
@@ -176,106 +174,59 @@ fun ContentScreen(
     // TextManager 实例（使用 remember 避免重复创建）
     val textManager = remember(context) { TextManager(context.applicationContext as Context) }
 
+
     // 启动初始化：同步内存数据并恢复上次阅读位置
     LaunchedEffect(uri, fileType) {
         try {
             // 1. 在后台启动协程执行 syncLoadPages，不阻塞当前协程
             launch(Dispatchers.IO) {
-                textManager.startLoadPages(uri, fileType, layoutParams.avgCharsPerLine, layoutParams.maxLinesPerPage)
+                textManager.startLoadPages(
+                    uri,
+                    fileType,
+                    layoutParams.avgCharsPerLine,
+                    layoutParams.maxLinesPerPage
+                )
             }
-
-            // 3. 尝试获取阅读进度（设置超时，避免无限等待）
-            var retryCount = 0
-            var maxRetryCount = 10
-            
-            while (lastReadingPage == null && retryCount < maxRetryCount) {
-                val progress = textManager.getLastReadPageNumber(uri.toString())
-                if (progress != null) {
-                    lastReadingPage = progress
-                    hasLoadedProgress = true
-                } else {
-                    // 等待一小段时间后重试
-                    delay(100)
-                    retryCount++
-                }
-            }
-
-            // 4. 如果没有获取到进度，设置为 0（从第一页开始）
-            if (!hasLoadedProgress) {
-                lastReadingPage = 0
-                hasLoadedProgress = true
-            }
-
-            // 2. 等待 hasBook = true（有缓存对象）
-            retryCount = 0
-            maxRetryCount = 20
-            while (retryCount < maxRetryCount) {
-                delay(50)
-                val bookReady = textManager.hasBook(uri.toString())
-                if (bookReady) {
-                    hasBook = true
-                    break
-                }
-                delay(150)
-                retryCount++
-            }
-            // 尝试getPage
-            retryCount = 0
-            maxRetryCount = 20
-            while (retryCount < maxRetryCount) {
-                delay(50)
-                val pageContent = textManager.getPage(uri.toString(), lastReadingPage ?: 0)
-                if (pageContent != null) {
-                    val pagesCount = textManager.getPagesCount(uri.toString())
-                    if (pagesCount != null && pagesCount > 0) {
-                        totalPages = pagesCount
-                    }
-                    break
-                }
-                delay(150)
-                retryCount++
-            }
-            // 尝试totalPages
-            retryCount = 0
-            maxRetryCount = 20
-            while (retryCount < maxRetryCount) {
-                delay(50)
-                val pagesCount = textManager.getPagesCount(uri.toString())
-                if (pagesCount != null && pagesCount > 0) {
-                    totalPages = pagesCount
-                    break
-                }
-                delay(150)
-                retryCount++
-            }
-
-
-            // 6. 跳转到上次阅读位置
-            if (lastReadingPage != null) {
-                pagerState.scrollToPage(lastReadingPage!!)
-            }
-
         } catch (e: Exception) {
-            errorMessage = "加载失败：${e.message}"
+            errorMessage = "初始化失败：${e.message}"
+        }
+            // 1. 尝试获取阅读进度（设置超时，避免无限等待）
+        var retryCount = 0
+        val maxProgressRetry = 10
+        var hasLoadedProgress = false
+        while (lastReadingPage == null && retryCount < maxProgressRetry) {
+            val progress = textManager.getLastReadPageNumber(uri.toString())
+            if (progress != null) {
+                lastReadingPage = progress
+                hasLoadedProgress = true
+            } else {
+                delay(100)
+                retryCount++
+            }
+        }
+
+        // 2. 如果没有获取到进度，设置为 0（从第一页开始）
+        if (!hasLoadedProgress) {
+            lastReadingPage = 0
         }
     }
-
     // 任务 2：持续更新 totalPages（后台运行）
     DisposableEffect(Unit) {
         val pageCountJob = lifecycleScope.launch {
             // 持续检查，直到书籍加载完成
             while (true) {
-                
+                delay(50)
+
                 val pagesCount = textManager.getPagesCount(uri.toString())
                 if (pagesCount != null && pagesCount > 0) {
                     totalPages = pagesCount
                 }
-                
+
                 // 完成后退出
                 if (textManager.isBookCompleted(uri.toString())) {
                     break
                 }
-                delay(50)
+                delay(150)
             }
         }
 
@@ -294,6 +245,13 @@ fun ContentScreen(
                 textManager.preloadPagesRange(uri.toString(), pagerState.currentPage, pagerState.currentPage + 1)
             }
             // 不用预加载前一页，即使回退就从数据库中获取把
+        }
+    }
+    LaunchedEffect(totalPages, lastReadingPage) {
+        // 恢复上次阅读位置（如果有）
+        if ((!hasRestoredLastReading) && totalPages > 0 && lastReadingPage != null) {
+            pagerState.scrollToPage(lastReadingPage!!)
+            hasRestoredLastReading = true
         }
     }
 
@@ -385,7 +343,7 @@ fun ContentScreen(
                 }
 
                 // 没有书籍缓存
-                !hasBook -> {
+                totalPages <= 0 -> {
                     Text(
                         text = "文件中没有内容",
                         style = MaterialTheme.typography.bodyLarge,
