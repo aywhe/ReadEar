@@ -2,9 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 添加这个权限，虽然 TTS 不需要录音，但 MIUI/HyperOS 需要它来认证音频输出 -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_DOCUMENTS" />
@@ -36,6 +33,11 @@
             android:label="@string/content_title"
             android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.ReadEar" />
-    </application>
 
+    </application>
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 </manifest>

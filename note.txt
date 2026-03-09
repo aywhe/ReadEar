@@ -1,0 +1,10 @@
+- 创建tts总是失败，status = -1
+override fun onInit(status: Int) {
+        Log.d("ContentActivity", "TTS 初始化状态：$status")
+        if (status == TextToSpeech.SUCCESS) {...}
+解决办法：https://cloud.tencent.com/developer/article/2516111
+<queries>
+    <intent>
+        <action android:name="android.intent.action.TTS_SERVICE" />
+    </intent>
+</queries>

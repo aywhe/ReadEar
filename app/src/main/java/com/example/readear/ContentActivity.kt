@@ -63,16 +63,8 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     override fun onInit(status: Int) {
         Log.d("ContentActivity", "TTS 初始化状态：$status")
         if (status == TextToSpeech.SUCCESS) {
-            Log.d("ContentActivity", "TTS 初始化成功，设置语言")
-            val result = textToSpeech?.setLanguage(Locale.CHINA) ?: TextToSpeech.LANG_MISSING_DATA
-            Log.d("ContentActivity", "语言设置结果：$result")
-            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                //Toast.makeText(this, "不支持该语言", Toast.LENGTH_SHORT).show()
-                Log.e("ContentActivity", "TTS 语言不支持：$result")
-            } else {
-                Log.d("ContentActivity", "TTS 语言设置成功")
-                isTTSAvailable = true
-            }
+            Log.d("ContentActivity", "TTS 初始化成功")
+            isTTSAvailable = true
         } else {
             val errorMessage = when (status) {
                 -1 -> "TTS 通用错误"
@@ -108,7 +100,7 @@ class ContentActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         // 延迟初始化 TTS，避免在 onCreate 中立即初始化导致失败
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-            delay(500) // 延迟 500ms 初始化
+            delay(100) // 延迟 100ms 初始化
             Log.d("ContentActivity", "开始初始化 TTS")
             textToSpeech = TextToSpeech(this@ContentActivity, this@ContentActivity)
         }
