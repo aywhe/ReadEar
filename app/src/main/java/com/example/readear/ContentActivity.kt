@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -329,6 +330,9 @@ fun ContentScreen(
     )
 
     var showJumpDialog by remember { mutableStateOf(false) }
+    
+    // 搜索相关状态
+    var showSearchWindow by remember { mutableStateOf(false) }
 
     val layoutParams by remember(context) {
         derivedStateOf {
@@ -695,7 +699,18 @@ fun ContentScreen(
                     pagerState.animateScrollToPage(targetPage - 1)
                 }
                 showJumpDialog = false
+            },
+            onSearchClick = {
+                showJumpDialog = false
+                showSearchWindow = true
             }
+        )
+    }
+    
+    // 显示搜索窗口
+    if (showSearchWindow) {
+        DraggableSearchWindow(
+            onDismiss = { showSearchWindow = false }
         )
     }
 }
@@ -830,7 +845,8 @@ private fun JumpToPageDialog(
     currentPage: Int,
     totalPages: Int,
     onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit
+    onConfirm: (Int) -> Unit,
+    onSearchClick: () -> Unit
 ) {
     var pageNumber by remember { mutableStateOf(currentPage.toString()) }
 
@@ -887,6 +903,11 @@ private fun JumpToPageDialog(
             TextButton(onClick = onDismiss) {
                 Text("取消")
             }
+            // 搜索按钮
+            Spacer(modifier = Modifier.width(8.dp))
+            OutlinedButton(onClick = onSearchClick) {
+                Text("搜索")
+            }
         }
     )
 }
@@ -933,6 +954,88 @@ fun DraggablePlayButton(
                 contentDescription = if (isSpeaking) "暂停" else "播放",
                 modifier = Modifier.size(24.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun DraggableSearchWindow(
+    onDismiss: () -> Unit
+) {
+    var offset by remember { mutableStateOf(IntOffset(0, 0)) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
+        Card(
+            modifier = Modifier
+                .offset { offset }
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragStart = { },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            offset += IntOffset(
+                                dragAmount.x.toInt(),
+                                dragAmount.y.toInt()
+                            )
+                        }
+                    )
+                }
+                .wrapContentWidth()
+                .wrapContentHeight(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+            shape = MaterialTheme.shapes.medium
+        ) {
+            Row(
+                modifier = Modifier.padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 上一个按钮
+                Button(
+                    onClick = { },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text("上一个", fontSize = 12.sp)
+                }
+
+                // 下一个按钮
+                Button(
+                    onClick = { },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text("下一个", fontSize = 12.sp)
+                }
+
+                // 文本输入框
+                OutlinedTextField(
+                    value = "",
+                    onValueChange = { },
+                    placeholder = { Text("搜索内容", fontSize = 12.sp) },
+                    singleLine = true,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(40.dp),
+                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp)
+                )
+
+                // 叉号按钮
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "关闭",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         }
     }
 }
