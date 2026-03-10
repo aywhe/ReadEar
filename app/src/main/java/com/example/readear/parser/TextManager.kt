@@ -195,10 +195,12 @@ class TextManager(private val context: Context) {
                 Log.e(TAG, "获取书籍信息失败：${e.message}", e)
                 null
             }
-            
-            if (book?.isCompleted == true) {
-                Log.d(TAG, "数据库缓存已完整，加载到内存：$uriString")
+
+            if(book != null) {
+                Log.d(TAG, "数据库缓存加载到内存：$uriString")
                 cacheCoordinator.loadAllPagesToMemory(uriString)
+            }
+            if (book?.isCompleted == true) {
                 onLoadingStateChanged?.invoke(uriString, TextLoadingState.COMPLETED)
             } else {
                 Log.d(TAG, "启动后台提取任务：$uriString")
@@ -239,8 +241,12 @@ class TextManager(private val context: Context) {
                         content = textChunk.content,
                         isCompleted = textChunk.isCompleted
                     )
-                    
-                    cacheCoordinator.savePage(uriString, page)
+
+                    if(!booksCache.hasCache(uriString)
+                        || booksCache.getCache(uriString)?.hasPage(page.pageNumber) == false
+                    ) {
+                        cacheCoordinator.savePage(uriString, page)
+                    }
                     
                     pageCount++
                     lastPageIndex = textChunk.index
