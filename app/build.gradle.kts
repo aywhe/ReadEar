@@ -68,12 +68,12 @@ dependencies {
     // Room Database
     implementation("androidx.room:room-runtime:2.7.0-rc01")
     implementation("androidx.room:room-ktx:2.7.0-rc01")
-    implementation(libs.androidx.media3.common.ktx)
+    //implementation(libs.androidx.media3.common.ktx)
     ksp("androidx.room:room-compiler:2.7.0-rc01")
     
     // PDFBox for PDF files - 使用 Maven Central 的版本
-    implementation("org.apache.pdfbox:pdfbox:2.0.32")
-    
+    //implementation("org.apache.pdfbox:pdfbox:2.0.32")
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     // LocalBroadcastManager
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
 
