@@ -17,9 +17,9 @@ class TextExtractorFactory(private val context: Context) {
     fun getExtractor(fileType: FileType): TextExtractor {
         return when (fileType) {
             FileType.TXT -> TxtExtractor(context)
-            FileType.WORD -> WordExtractor(context)
             FileType.PDF -> PdfExtractor(context)
-            FileType.OTHER -> throw UnsupportedOperationException("不支持的文件类型")
+            FileType.DOCX -> WordExtractor(context)  // 新增
+            else -> throw IllegalArgumentException("Unsupported file type: $fileType")
         }
     }
 }

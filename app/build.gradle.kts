@@ -14,12 +14,15 @@ android {
 
     defaultConfig {
         applicationId = "com.example.readear"
-        minSdk = 24
-        targetSdk = 36
+       minSdk = 26  // ⭐ 从 24 提升到 26
+      targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        // ⭐ 保留这个配置（解决方法数超限）
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -38,7 +41,7 @@ android {
     buildFeatures {
         compose = true
     }
-    
+
     // 添加打包选项，排除重复的元数据文件
     packaging {
         resources {
@@ -47,6 +50,10 @@ android {
             excludes += "META-INF/LICENSE.txt"
             excludes += "META-INF/NOTICE"
             excludes += "META-INF/NOTICE.txt"
+
+            // 新增：排除 POI 的重复依赖
+            excludes += "META-INF/NOTICE.txt"
+            excludes += "META-INF/LICENSE.txt"
         }
     }
 }
@@ -64,19 +71,28 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended:1.5.4")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
-    
+
     // Room Database
     implementation("androidx.room:room-runtime:2.7.0-rc01")
     implementation("androidx.room:room-ktx:2.7.0-rc01")
     //implementation(libs.androidx.media3.common.ktx)
     ksp("androidx.room:room-compiler:2.7.0-rc01")
-    
+
     // PDFBox for PDF files - 使用 Maven Central 的版本
     //implementation("org.apache.pdfbox:pdfbox:2.0.32")
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
     // LocalBroadcastManager
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
+
+    // Apache POI for Word documents
+    implementation("org.apache.poi:poi:5.2.5")
+    implementation("org.apache.poi:poi-ooxml:5.2.5")
+    implementation("commons-io:commons-io:2.15.0")
+    implementation("org.apache.commons:commons-compress:1.25.0")
+
+    // 添加 MultiDex 支持
+    //implementation("androidx.multidex:multidex:2.0.1")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

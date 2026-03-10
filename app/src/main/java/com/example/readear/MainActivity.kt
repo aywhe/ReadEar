@@ -254,7 +254,7 @@ class MainActivity : ComponentActivity() {
         val name = fileName.lowercase()
         return when {
             name.endsWith(".pdf") -> FileType.PDF
-            name.endsWith(".doc") || name.endsWith(".docx") -> FileType.WORD
+            name.endsWith(".docx") -> FileType.DOCX
             name.endsWith(".txt") -> FileType.TXT
             else -> FileType.OTHER
         }
@@ -417,7 +417,7 @@ data class FileItem(
 
 enum class FileType(val iconResId: Int) {
     PDF(R.drawable.ic_pdf),
-    WORD(R.drawable.ic_word),
+    DOCX(R.drawable.ic_word),
     TXT(R.drawable.ic_txt),
     OTHER(R.drawable.ic_other)
 }
@@ -545,7 +545,7 @@ fun FileListScreen(
                         ReadEar - 智能听书助手 v1.0.0
                         
                         主要功能：
-                        • 支持 TXT、Word、PDF 格式
+                        • 支持 TXT、DOCX、PDF 格式
                         • 文字转语音朗读
                         • 定时关闭功能
                         • 自动保存阅读进度
@@ -708,7 +708,7 @@ fun FileListScreenPreview() {
                 ),
                 FileItem(
                     "需求说明.docx",
-                    FileType.WORD,
+                    FileType.DOCX,
                     "content://com.android.providers.media.documents/document/word%3A67890",
                     1024 * 256
                 ),
