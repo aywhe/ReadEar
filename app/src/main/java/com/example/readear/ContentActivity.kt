@@ -962,15 +962,20 @@ fun DraggablePlayButton(
 fun DraggableSearchWindow(
     onDismiss: () -> Unit
 ) {
+    val density = LocalDensity.current
     var offset by remember { mutableStateOf(IntOffset(0, 0)) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .padding(16.dp)
     ) {
         Card(
             modifier = Modifier
-                .offset { offset }
+                .offset {
+                    IntOffset(offset.x, offset.y)
+                }
+                .align(Alignment.BottomCenter)
                 .pointerInput(Unit) {
                     detectDragGestures(
                         onDragStart = { },
