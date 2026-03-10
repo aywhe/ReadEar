@@ -17,3 +17,6 @@ speak第四个参数不要是null，就可以触发了。
 
 - 在实现文本选择时，使用了 SelectionContainer 和 Box，Text，出现的问题是嵌套后会相互消费点击事件，导致SelectionContainer无法取消文本选择
 解决办法：没有，所以放弃文本选择，改用长按复制全部，并提示
+
+-提取pdf文本时，使用 org.apache.pdfbox:pdfbox: 运行时会报错，没有找到 jwt，但是Android没有jwt
+解决方法： 改成使用 com.tom-roush:pdfbox-android:2.0.27.0，已经时最后的版本了，虽然很旧，却可以用）

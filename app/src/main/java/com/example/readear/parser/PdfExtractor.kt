@@ -8,45 +8,44 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
-import java.io.InputStream
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader;
 
 /**
  * PDF 文件文本提取器
  */
 class PdfExtractor(private val context: Context) : TextExtractor {
-    
+
     override fun extractTextRaw(uri: Uri): Flow<String> = flow {
-        var inputStream: InputStream? = null
+        if (!PDFBoxResourceLoader.isReady()) {
+            PDFBoxResourceLoader.init(context)
+        }
         try {
-            inputStream = context.contentResolver.openInputStream(uri)
-            if (inputStream == null) {
-                throw Exception("无法打开文件输入流")
-            }
-            
-            val document = PDDocument.load(inputStream)
-            try {
-                val numberOfPages = document.numberOfPages
-                
-                for (i in 1..numberOfPages) {
-                    val pdfTextStripper = PDFTextStripper()
-                    pdfTextStripper.startPage = i
-                    pdfTextStripper.endPage = i
-                    val text = pdfTextStripper.getText(document)
-                    
-                    text.lines().forEach { line ->
-                        if (line.isNotEmpty()) {
-                            emit(line)
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                PDDocument.load(inputStream).use { document ->
+                    val stripper = PDFTextStripper()
+
+                    // 获取总页数
+                    val totalPages = document.numberOfPages
+
+                    // 按页读取文本
+                    for (page in 1..totalPages) {
+                        stripper.startPage = page
+                        stripper.endPage = page
+
+                        val text = stripper.getText(document)
+
+                        // 将每页文本按行分割并发出
+                        text.lines().forEach { line ->
+                            if (line.isNotBlank()) {
+                                emit(line)
+                            }
                         }
                     }
                 }
-            } finally {
-                document.close()
             }
         } catch (e: Exception) {
             e.printStackTrace()
             throw e
-        } finally {
-            inputStream?.close()
         }
     }.flowOn(Dispatchers.IO)
 }

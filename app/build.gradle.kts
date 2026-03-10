@@ -74,6 +74,7 @@ dependencies {
     // PDFBox for PDF files - 使用 Maven Central 的版本
     //implementation("org.apache.pdfbox:pdfbox:2.0.32")
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
     // LocalBroadcastManager
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
 
