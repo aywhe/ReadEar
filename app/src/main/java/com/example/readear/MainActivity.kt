@@ -299,10 +299,10 @@ class MainActivity : ComponentActivity() {
     
     private fun stopAllSpeaking() {
         // 通知 ContentActivity 停止播放
-        // 这里可以通过广播或者事件总线来实现
-        // 简单的方式是使用 LocalBroadcastManager
+        // 使用 LocalBroadcastManager 发送本地广播
         val intent = android.content.Intent("com.example.readear.STOP_SPEAKING")
-        sendBroadcast(intent)
+        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        Log.d("MainActivity", "发送停止播放广播")
     }
     
     @OptIn(ExperimentalMaterial3Api::class)

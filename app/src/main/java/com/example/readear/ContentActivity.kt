@@ -69,6 +69,7 @@ class ContentActivity : ComponentActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "com.example.readear.STOP_SPEAKING") {
                 stopSpeaking()
+                Log.d("ContentActivity", "收到定时器广播，已停止播放")
                 Toast.makeText(this@ContentActivity, "定时时间到，已停止播放", Toast.LENGTH_SHORT).show()
             }
         }
