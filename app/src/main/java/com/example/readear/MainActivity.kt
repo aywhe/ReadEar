@@ -52,12 +52,12 @@ class MainActivity : ComponentActivity() {
         var screenDpi: Float = 0f
         var screenWidthPx: Int = 0
         var screenHeightPx: Int = 0
-        
+
         // 定时器相关
         var countdownTimer: CountDownTimer? = null
         var remainingTimeMinutes by mutableStateOf<Int>(0)
     }
-    
+
     private val fileBrowserLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -72,17 +72,17 @@ class MainActivity : ComponentActivity() {
                 // 忽略异常，URI 可能没有持久权限标志
                 e.printStackTrace()
             }
-            
+
             val fileInfo = getFileInfoFromUri(it)
             //Toast.makeText(this, "选择了文件：${fileInfo.fileName}", Toast.LENGTH_SHORT).show()
-            
+
             val newFileItem = FileItem(
                 fileName = fileInfo.fileName,
                 fileType = getFileTypeFromName(fileInfo.fileName),
                 fileUri = it.toString(),
                 fileSize = fileInfo.fileSize
             )
-            
+
             addFileToList(newFileItem)
             // 异步保存，不阻塞 UI
             FileRepository(applicationContext).saveFileList(fileList)
@@ -95,15 +95,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
+
         // 获取屏幕信息
         val metrics = resources.displayMetrics
         screenDpi = metrics.densityDpi.toFloat()
         screenWidthPx = metrics.widthPixels
         screenHeightPx = metrics.heightPixels
-        
+
         fileRepository = FileRepository(applicationContext)
-        
+
         setContent {
             ReadEarTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -132,7 +132,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        
+
         // 异步恢复数据
         restoreFileList()
     }
@@ -150,7 +150,7 @@ class MainActivity : ComponentActivity() {
 
     private fun addFileToList(newFile: FileItem) {
         val existingIndex = fileList.indexOfFirst { it.fileUri == newFile.fileUri }
-        
+
         fileList = if (existingIndex >= 0) {
             val updatedList = fileList.toMutableList().apply {
                 removeAt(existingIndex)
@@ -174,7 +174,7 @@ class MainActivity : ComponentActivity() {
             try {
                 val textManager = TextManager(applicationContext)
                 textManager.delBook(fileUri)
-                
+
                 // 释放 URI 权限
                 try {
                     val uri = Uri.parse(fileUri)
@@ -226,7 +226,7 @@ class MainActivity : ComponentActivity() {
     private fun getFileInfoFromUri(uri: Uri): FileInfo {
         var fileName = ""
         var fileSize: Long = -1
-        
+
         if (uri.scheme == "content") {
             contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
@@ -234,7 +234,7 @@ class MainActivity : ComponentActivity() {
                     if (displayNameIndex >= 0) {
                         fileName = cursor.getString(displayNameIndex) ?: "未知文件"
                     }
-                    
+
                     val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
                     if (sizeIndex >= 0) {
                         fileSize = cursor.getLong(sizeIndex)
@@ -242,11 +242,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        
+
         if (fileName.isEmpty()) {
             fileName = uri.lastPathSegment ?: "未知文件"
         }
-        
+
         return FileInfo(fileName, fileSize)
     }
 
@@ -259,7 +259,7 @@ class MainActivity : ComponentActivity() {
             else -> FileType.OTHER
         }
     }
-    
+
     private fun openContentActivity(file: FileItem) {
         val intent = Intent(this, ContentActivity::class.java).apply {
             putExtra(ContentActivity.EXTRA_FILE_URI, file.fileUri)
@@ -268,43 +268,45 @@ class MainActivity : ComponentActivity() {
         }
         startActivity(intent)
     }
-    
+
     fun startTimer(minutes: Int) {
         // 取消之前的定时器
         stopTimer()
-        
+
         val millisInFuture = minutes * 60 * 1000L
-        
+
         countdownTimer = object : CountDownTimer(millisInFuture, 1000) {
-           override fun onTick(millisUntilFinished: Long) {
-                remainingTimeMinutes = kotlin.math.ceil((millisUntilFinished * 1.0) / 1000 / 60).toInt()
+            override fun onTick(millisUntilFinished: Long) {
+                remainingTimeMinutes =
+                    kotlin.math.ceil((millisUntilFinished * 1.0) / 1000 / 60).toInt()
             }
-            
-           override fun onFinish() {
+
+            override fun onFinish() {
                 remainingTimeMinutes = 0
-               Log.d("MainActivity", "Timer finished, stopping all speaking")
+                Log.d("MainActivity", "Timer finished, stopping all speaking")
                 // 停止播放
                 stopAllSpeaking()
             }
         }.start()
         Log.d("MainActivity", "Timer started for $minutes minutes")
     }
-    
+
     fun stopTimer() {
         countdownTimer?.cancel()
         countdownTimer = null
         remainingTimeMinutes = 0
         Log.d("MainActivity", "Timer stopped")
     }
-    
+
     private fun stopAllSpeaking() {
         // 通知 ContentActivity 停止播放
         // 使用 LocalBroadcastManager 发送本地广播
         val intent = android.content.Intent("com.example.readear.STOP_SPEAKING")
-        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(this)
+            .sendBroadcast(intent)
         Log.d("MainActivity", "发送停止播放广播")
     }
-    
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun TimerDialog(
@@ -314,42 +316,42 @@ class MainActivity : ComponentActivity() {
         onStopTimer: () -> Unit
     ) {
         // 使用当前剩余时间或 0 作为初始值
-        var sliderPosition by remember { 
+        var sliderPosition by remember {
             mutableStateOf(currentRemainingMinutes.toFloat() ?: 0f)
         }
-        
+
         val minMinutes = 0
         val maxMinutes = 120
 
-        
+
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("定时关闭") },
+            title = { Text("定时关闭朗读") },
             text = {
                 Column {
                     Text(
-                        text = if ((sliderPosition).toInt()> 0) {
+                        text = if ((sliderPosition).toInt() > 0) {
                             "剩余时间：${(sliderPosition).toInt()}分钟"
                         } else {
                             "设置时间：0 分钟"
                         },
                         style = MaterialTheme.typography.bodyLarge
                     )
-                    
+
                     Spacer(modifier = Modifier.height(24.dp))
-                    
+
                     Slider(
                         value = sliderPosition,
-                        onValueChange = { 
-                            sliderPosition = it 
+                        onValueChange = {
+                            sliderPosition = it
                         },
                         valueRange = minMinutes.toFloat()..maxMinutes.toFloat(),
                         steps = (maxMinutes - minMinutes),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    
+
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -381,9 +383,9 @@ class MainActivity : ComponentActivity() {
                     OutlinedButton(onClick = onDismiss) {
                         Text("取消")
                     }
-                    
+
                     // 只有当有正在运行的定时器时才显示停止按钮
-                    if ( currentRemainingMinutes > 0) {
+                    if (currentRemainingMinutes > 0) {
                         Spacer(modifier = Modifier.width(8.dp))
                         OutlinedButton(
                             onClick = onStopTimer,
@@ -432,8 +434,9 @@ fun FileListScreen(
     val scope = rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
     var showTimerDialog by remember { mutableStateOf(false) }
+    var showAboutDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current as MainActivity
-    
+
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("文件列表 (${files.size})") },
@@ -445,30 +448,29 @@ fun FileListScreen(
                             contentDescription = "更多选项"
                         )
                     }
-                    
+
                     DropdownMenu(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
                         DropdownMenuItem(
                             text = { Text("设置") },
-                            onClick = { 
+                            onClick = {
                                 showMenu = false
                                 // TODO: 实现设置功能
                             }
                         )
                         DropdownMenuItem(
-                            text = { 
+                            text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (MainActivity.remainingTimeMinutes != null && MainActivity.remainingTimeMinutes!! > 0) {
-                                        Text("定时(${MainActivity.remainingTimeMinutes})")
-                                    }
-                                    else{
+                                        Text("定时 (${MainActivity.remainingTimeMinutes})")
+                                    } else {
                                         Text("定时")
                                     }
                                 }
                             },
-                            onClick = { 
+                            onClick = {
                                 showMenu = false
                                 showTimerDialog = true
                             }
@@ -477,7 +479,7 @@ fun FileListScreen(
                             text = { Text("关于") },
                             onClick = {
                                 showMenu = false
-                                // TODO: 实现关于功能
+                                showAboutDialog = true
                             }
                         )
                     }
@@ -485,7 +487,7 @@ fun FileListScreen(
             },
             modifier = Modifier.padding(bottom = 8.dp)
         )
-        
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -494,7 +496,7 @@ fun FileListScreen(
             if (files.isEmpty()) {
                 item {
                     Text(
-                        text = "暂无文件，点击 + 号或浮动按钮添加文件",
+                        text = "暂无文件，点击浮动按钮 + 号添加文件",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(16.dp)
@@ -502,9 +504,9 @@ fun FileListScreen(
                 }
             } else {
                 items(files) { file ->
-                   FileListItem(
+                    FileListItem(
                         file = file,
-                        onDelete = { 
+                        onDelete = {
                             scope.launch {
                                 onDeleteFile(file)
                             }
@@ -515,13 +517,13 @@ fun FileListScreen(
             }
         }
     }
-    
+
     if (showTimerDialog) {
         (context as MainActivity).TimerDialog(
             currentRemainingMinutes = MainActivity.remainingTimeMinutes,
             onDismiss = { showTimerDialog = false },
             onConfirm = { minutes ->
-                if(minutes > 0) {
+                if (minutes > 0) {
                     context.startTimer(minutes)
                 }
                 showTimerDialog = false
@@ -529,6 +531,36 @@ fun FileListScreen(
             onStopTimer = {
                 context.stopTimer()
                 showTimerDialog = false
+            }
+        )
+    }
+
+    if (showAboutDialog) {
+        AlertDialog(
+            onDismissRequest = { showAboutDialog = false },
+            title = { Text("关于 ReadEar") },
+            text = {
+                Text(
+                    text = """
+                        ReadEar - 智能听书助手 v1.0.0
+                        
+                        主要功能：
+                        • 支持 TXT、Word、PDF 格式
+                        • 文字转语音朗读
+                        • 定时关闭功能
+                        • 自动保存阅读进度
+                        
+                        让阅读更轻松！
+                    """.trimIndent(),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showAboutDialog = false }
+                ) {
+                    Text("确定")
+                }
             }
         )
     }
@@ -547,7 +579,7 @@ private fun formatFileSize(size: Long): String {
 fun FileListItem(file: FileItem, onDelete: suspend () -> Unit, onClick: () -> Unit = {}) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -566,15 +598,15 @@ fun FileListItem(file: FileItem, onDelete: suspend () -> Unit, onClick: () -> Un
                 contentDescription = null,
                 modifier = Modifier.size(48.dp)
             )
-            
+
             Spacer(modifier = Modifier.width(16.dp))
-            
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = file.fileName,
                     style = MaterialTheme.typography.bodyLarge
                 )
-                
+
                 if (file.fileSize > 0) {
                     Text(
                         text = formatFileSize(file.fileSize),
@@ -583,7 +615,7 @@ fun FileListItem(file: FileItem, onDelete: suspend () -> Unit, onClick: () -> Un
                     )
                 }
             }
-            
+
             // 删除按钮只在编辑模式下显示（这里简化为始终显示）
             IconButton(onClick = { showDeleteDialog = true }) {
                 Icon(
@@ -594,7 +626,7 @@ fun FileListItem(file: FileItem, onDelete: suspend () -> Unit, onClick: () -> Un
             }
         }
     }
-    
+
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -668,9 +700,24 @@ fun FileListScreenPreview() {
     ReadEarTheme {
         FileListScreen(
             files = listOf(
-                FileItem("项目文档.pdf", FileType.PDF, "content://com.android.providers.media.documents/document/pdf%3A12345", 1024 * 512),
-                FileItem("需求说明.docx", FileType.WORD, "content://com.android.providers.media.documents/document/word%3A67890", 1024 * 256),
-                FileItem("笔记.txt", FileType.TXT, "content://com.android.providers.media.documents/document/text%3A11111", 1024 * 10)
+                FileItem(
+                    "项目文档.pdf",
+                    FileType.PDF,
+                    "content://com.android.providers.media.documents/document/pdf%3A12345",
+                    1024 * 512
+                ),
+                FileItem(
+                    "需求说明.docx",
+                    FileType.WORD,
+                    "content://com.android.providers.media.documents/document/word%3A67890",
+                    1024 * 256
+                ),
+                FileItem(
+                    "笔记.txt",
+                    FileType.TXT,
+                    "content://com.android.providers.media.documents/document/text%3A11111",
+                    1024 * 10
+                )
             ),
             onAddFileClick = {}
         )

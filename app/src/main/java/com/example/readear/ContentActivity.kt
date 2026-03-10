@@ -63,14 +63,15 @@ class ContentActivity : ComponentActivity() {
 
     // 当前阅读页码
     private var currentPageNumber: Int = 0
-    
+
     // 定时器广播接收器
     private val timerStopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "com.example.readear.STOP_SPEAKING") {
                 stopSpeaking()
                 Log.d("ContentActivity", "收到定时器广播，已停止播放")
-                Toast.makeText(this@ContentActivity, "定时时间到，已停止播放", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@ContentActivity, "定时时间到，已停止播放", Toast.LENGTH_SHORT)
+                    .show()
             }
         }
     }
@@ -78,7 +79,7 @@ class ContentActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
+
         // 注册广播接收器
         LocalBroadcastManager.getInstance(this).registerReceiver(
             timerStopReceiver,
@@ -95,7 +96,7 @@ class ContentActivity : ComponentActivity() {
 
         // 初始化 TTS 管理器
         speechManager = DefaultTextToSpeech.getInstance(this)
-        
+
         // 监听 TTS 状态变化
         observeTTSState()
 
@@ -143,7 +144,7 @@ class ContentActivity : ComponentActivity() {
                 }
             }
         }
-        
+
         // 设置错误回调
         speechManager?.onTTSError = { error ->
             Log.e("ContentActivity", "TTS 错误：$error")
@@ -155,7 +156,7 @@ class ContentActivity : ComponentActivity() {
         if (text.isNotEmpty()) {
             currentTextToSpeak = text
             Log.d("ContentActivity", "开始播放文本：${text.length} 字符")
-            
+
             val success = speechManager?.playText(text)
             if (success == false) {
                 Log.w("ContentActivity", "播放失败，TTS 可能未就绪")
@@ -220,23 +221,23 @@ class ContentActivity : ComponentActivity() {
         // 释放 URI 权限（可选，根据需求决定）
         saveReadingProgress()
         releasePersistedUriPermission()
-        
+
         // 释放 TTS 资源（注意：不释放单例，只重置状态）
         speechManager?.stopSpeaking()
         speechManager = null
         isSpeaking = false
         isTTSAvailable = false
-        
+
         // 注销广播接收器
         LocalBroadcastManager.getInstance(this).unregisterReceiver(timerStopReceiver)
     }
 
     private fun saveReadingProgress() {
         val fileUriString = intent.getStringExtra(EXTRA_FILE_URI) ?: return
-        
+
         if (currentPageNumber >= 0) {
             Log.d("ContentActivity", "保存进度：页码 ${currentPageNumber + 1}, URI: $fileUriString")
-            
+
             // 使用协程在后台线程执行保存操作
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                 try {
@@ -252,6 +253,7 @@ class ContentActivity : ComponentActivity() {
             Log.w("ContentActivity", "跳过保存：currentPageNumber = $currentPageNumber")
         }
     }
+
     /**
      * 释放持久化 URI 权限（如果需要的话）
      */
@@ -259,12 +261,12 @@ class ContentActivity : ComponentActivity() {
         try {
             val fileUriString = intent.getStringExtra(EXTRA_FILE_URI) ?: return
             val uri = fileUriString.toUri()
-            
+
             // 检查是否有持久化权限
             val hasPermission = contentResolver.persistedUriPermissions.any {
                 it.uri == uri && it.isReadPermission
             }
-            
+
             if (hasPermission) {
                 contentResolver.releasePersistableUriPermission(
                     uri,
@@ -354,7 +356,7 @@ fun ContentScreen(
             errorMessage = "初始化失败：${e.message}"
             isInitializing = false
         }
-            // 1. 尝试获取阅读进度（设置超时，避免无限等待）
+        // 1. 尝试获取阅读进度（设置超时，避免无限等待）
         var retryCount = 0
         val maxProgressRetry = 10
         var hasLoadedProgress = false
@@ -424,8 +426,8 @@ fun ContentScreen(
             hasRestoredLastReading = true
         }
     }
-    LaunchedEffect(isPlayDone){
-        if(isPlayDone){
+    LaunchedEffect(isPlayDone) {
+        if (isPlayDone) {
             // 播放完成后自动跳转到下一页
             val nextPageContent = textManager.getPage(uri.toString(), currentSpeakingPage + 1)
             if (nextPageContent != null) {
@@ -435,33 +437,33 @@ fun ContentScreen(
         }
     }
 
-    LaunchedEffect(isSpeaking){
-        if(isSpeaking){
-            if(currentSpeakingPage != pagerState.currentPage){
+    LaunchedEffect(isSpeaking) {
+        if (isSpeaking) {
+            if (currentSpeakingPage != pagerState.currentPage) {
                 pagerState.scrollToPage(currentSpeakingPage)
             }
-        }else{
+        } else {
             // 这样会导致自动播放时跳转错误
             // 停止播放时更新当前播放页面为当前显示的页面
             // currentSpeakingPage = pagerState.currentPage
         }
     }
 
-    DisposableEffect(isFullScreen){
+    DisposableEffect(isFullScreen) {
         // 切换隐藏和显示ContentScreen的状态栏
-            if (isFullScreen) {
-                // 隐藏状态栏
-                androidx.core.view.WindowInsetsControllerCompat(
-                    (context as ComponentActivity).window,
-                    (context as ComponentActivity).window.decorView
-                ).hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
-            } else {
-                // 显示状态栏
-                androidx.core.view.WindowInsetsControllerCompat(
-                    (context as ComponentActivity).window,
-                    (context as ComponentActivity).window.decorView
-                ).show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
-            }
+        if (isFullScreen) {
+            // 隐藏状态栏
+            androidx.core.view.WindowInsetsControllerCompat(
+                (context as ComponentActivity).window,
+                (context as ComponentActivity).window.decorView
+            ).hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+        } else {
+            // 显示状态栏
+            androidx.core.view.WindowInsetsControllerCompat(
+                (context as ComponentActivity).window,
+                (context as ComponentActivity).window.decorView
+            ).show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+        }
 
         onDispose {
             // 离开页面时恢复默认状态
@@ -471,7 +473,7 @@ fun ContentScreen(
             ).show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
         }
     }
-    
+
     // 定时保存进度：每 60 秒自动保存一次（修改为 1 分钟）
     DisposableEffect(Unit) {
         val autoSaveJob = lifecycleScope.launch {
@@ -598,9 +600,9 @@ fun ContentScreen(
                         LaunchedEffect(page) {
                             var retryCount = 0
                             val maxRetryCount = 50
-                            
+
                             Log.d("ContentActivity", "开始加载页面 $page")
-                            
+
                             while (chunk.value == null && retryCount < maxRetryCount) {
                                 val startTime = System.currentTimeMillis()
                                 val pageContent = textManager.getPage(uri.toString(), page)
@@ -608,10 +610,16 @@ fun ContentScreen(
 
                                 if (pageContent != null) {
                                     chunk.value = pageContent
-                                    Log.d("ContentActivity", "✓ 成功加载页面 $page，耗时：${loadTime}ms")
+                                    Log.d(
+                                        "ContentActivity",
+                                        "✓ 成功加载页面 $page，耗时：${loadTime}ms"
+                                    )
                                     break
                                 } else {
-                                    Log.d("ContentActivity", "✗ 未获取到页面 $page (retry: ${retryCount + 1}/$maxRetryCount)，耗时：${loadTime}ms")
+                                    Log.d(
+                                        "ContentActivity",
+                                        "✗ 未获取到页面 $page (retry: ${retryCount + 1}/$maxRetryCount)，耗时：${loadTime}ms"
+                                    )
                                 }
                                 delay(30)
                                 retryCount++
@@ -629,7 +637,10 @@ fun ContentScreen(
                                 chunk = displayChunk,
                                 onDoubleTap = {
                                     isFullScreen = !isFullScreen
-                                    Log.d("ContentActivity", "全屏模式变量 isFullScreen = $isFullScreen")
+                                    Log.d(
+                                        "ContentActivity",
+                                        "全屏模式变量 isFullScreen = $isFullScreen"
+                                    )
                                 },
                                 onLongPress = { selectedText ->
                                     showTextSelection(context, selectedText)
@@ -637,7 +648,7 @@ fun ContentScreen(
                             )
                         }
                     }
-                    
+
                     // 添加可拖动的播放按钮
                     DraggablePlayButton(
                         modifier = Modifier
@@ -646,26 +657,29 @@ fun ContentScreen(
                         isSpeaking = isSpeaking,
                         onClick = {
                             lifecycleScope.launch {
-                                val currentPageContent = textManager.getPage(uri.toString(), pagerState.currentPage)
+                                val currentPageContent =
+                                    textManager.getPage(uri.toString(), pagerState.currentPage)
                                 if (currentPageContent != null) {
                                     // 更新当前播放页面为当前显示的页面
                                     currentSpeakingPage = pagerState.currentPage
                                     onPlayText(currentPageContent.content)
                                 } else {
-                                    Toast.makeText(context, "当前页面内容为空", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "当前页面内容为空", Toast.LENGTH_SHORT)
+                                        .show()
                                 }
                             }
                         },
                         onStop = { onStopSpeaking() }
                     )
                 }
+
                 else -> {
-                        Text(
-                            text = "文件夹没有内容",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.align(Alignment.Center)
-                        )
+                    Text(
+                        text = "文件夹没有内容",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
                 }
             }
         }
@@ -728,7 +742,8 @@ private fun showTextSelection(context: Context, text: String) {
     // 后续可以实现复制、分享等功能
 
     // 复制到剪贴板，并提示已复制文本
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    val clipboard =
+        context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
     val clip = android.content.ClipData.newPlainText("Selected Text", text)
     clipboard.setPrimaryClip(clip)
     Toast.makeText(context, "已复制文本", Toast.LENGTH_SHORT).show()
