@@ -578,9 +578,10 @@ fun ContentScreen(
                                 chunk = displayChunk,
                                 onDoubleTap = {
                                     isFullScreen = !isFullScreen
+                                    Log.d("ContentActivity", "全屏模式变量 isFullScreen = $isFullScreen")
                                 },
                                 onLongPress = { selectedText ->
-                                    showTextSelectionMenu(context, selectedText)
+                                    showTextSelection(context, selectedText)
                                 }
                             )
                         }
@@ -671,9 +672,16 @@ fun PageContent(
     }
 }
 
-private fun showTextSelectionMenu(context: Context, text: String) {
-    Toast.makeText(context, "长按文本：$text", Toast.LENGTH_SHORT).show()
+private fun showTextSelection(context: Context, text: String) {
+    //Toast.makeText(context, "长按文本：$text", Toast.LENGTH_SHORT).show()
     // 后续可以实现复制、分享等功能
+
+    // 复制到剪贴板，并提示已复制文本
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    val clip = android.content.ClipData.newPlainText("Selected Text", text)
+    clipboard.setPrimaryClip(clip)
+    Toast.makeText(context, "已复制文本", Toast.LENGTH_SHORT).show()
+
 }
 
 /**

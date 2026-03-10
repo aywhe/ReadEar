@@ -8,8 +8,12 @@ override fun onInit(status: Int) {
         <action android:name="android.intent.action.TTS_SERVICE" />
     </intent>
 </queries>
+
 - textToSpeech的回调函数不会触发，比如下面的onStart、onDone、onError等
 textToSpeech?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                   override fun onStart(utteranceId: String?) {...}
 解决办法： https://blog.csdn.net/u010555997/article/details/50926570
 speak第四个参数不要是null，就可以触发了。
+
+- 在实现文本选择时，使用了 SelectionContainer 和 Box，Text，出现的问题是嵌套后会相互消费点击事件，导致SelectionContainer无法取消文本选择
+解决办法：没有，所以放弃文本选择，改用长按复制全部，并提示
