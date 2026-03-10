@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.CountDownTimer
 import android.provider.OpenableColumns
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,6 +20,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -36,6 +41,8 @@ import com.example.readear.parser.TextManager
 import com.example.readear.repository.FileRepository
 import com.example.readear.ui.theme.ReadEarTheme
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "file_list")
 
@@ -45,6 +52,10 @@ class MainActivity : ComponentActivity() {
         var screenDpi: Float = 0f
         var screenWidthPx: Int = 0
         var screenHeightPx: Int = 0
+        
+        // 定时器相关
+        var countdownTimer: CountDownTimer? = null
+        var remainingTimeMinutes by mutableStateOf<Int>(0)
     }
     
     private val fileBrowserLauncher = registerForActivityResult(
@@ -257,6 +268,142 @@ class MainActivity : ComponentActivity() {
         }
         startActivity(intent)
     }
+    
+    fun startTimer(minutes: Int) {
+        // 取消之前的定时器
+        stopTimer()
+        
+        val millisInFuture = minutes * 60 * 1000L
+        
+        countdownTimer = object : CountDownTimer(millisInFuture, 1000) {
+           override fun onTick(millisUntilFinished: Long) {
+                remainingTimeMinutes = kotlin.math.ceil((millisUntilFinished * 1.0) / 1000 / 60).toInt()
+            }
+            
+           override fun onFinish() {
+                remainingTimeMinutes = 0
+               Log.d("MainActivity", "Timer finished, stopping all speaking")
+                // 停止播放
+                stopAllSpeaking()
+            }
+        }.start()
+        Log.d("MainActivity", "Timer started for $minutes minutes")
+    }
+    
+    fun stopTimer() {
+        countdownTimer?.cancel()
+        countdownTimer = null
+        remainingTimeMinutes = 0
+        Log.d("MainActivity", "Timer stopped")
+    }
+    
+    private fun stopAllSpeaking() {
+        // 通知 ContentActivity 停止播放
+        // 这里可以通过广播或者事件总线来实现
+        // 简单的方式是使用 LocalBroadcastManager
+        val intent = android.content.Intent("com.example.readear.STOP_SPEAKING")
+        sendBroadcast(intent)
+    }
+    
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun TimerDialog(
+        currentRemainingMinutes: Int,
+        onDismiss: () -> Unit,
+        onConfirm: (Int) -> Unit,
+        onStopTimer: () -> Unit
+    ) {
+        // 使用当前剩余时间或 0 作为初始值
+        var sliderPosition by remember { 
+            mutableStateOf(currentRemainingMinutes.toFloat() ?: 0f)
+        }
+        
+        val minMinutes = 0
+        val maxMinutes = 120
+
+        
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("定时关闭") },
+            text = {
+                Column {
+                    Text(
+                        text = if ((sliderPosition).toInt()> 0) {
+                            "剩余时间：${(sliderPosition).toInt()}分钟"
+                        } else {
+                            "设置时间：0 分钟"
+                        },
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Slider(
+                        value = sliderPosition,
+                        onValueChange = { 
+                            sliderPosition = it 
+                        },
+                        valueRange = minMinutes.toFloat()..maxMinutes.toFloat(),
+                        steps = (maxMinutes - minMinutes),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "${minMinutes}分钟",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "${maxMinutes}分钟",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onConfirm((sliderPosition).toInt())
+                    }
+                ) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                Row {
+                    OutlinedButton(onClick = onDismiss) {
+                        Text("取消")
+                    }
+                    
+                    // 只有当有正在运行的定时器时才显示停止按钮
+                    if ( currentRemainingMinutes > 0) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedButton(
+                            onClick = onStopTimer,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("停止")
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // 清理定时器
+        stopTimer()
+    }
 }
 
 data class FileItem(
@@ -283,16 +430,57 @@ fun FileListScreen(
     onFileClick: (FileItem) -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
+    var showMenu by remember { mutableStateOf(false) }
+    var showTimerDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current as MainActivity
     
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("文件列表 (${files.size})") },
             actions = {
-                IconButton(onClick = onAddFileClick) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "添加文件"
-                    )
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "更多选项"
+                        )
+                    }
+                    
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("设置") },
+                            onClick = { 
+                                showMenu = false
+                                // TODO: 实现设置功能
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { 
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (MainActivity.remainingTimeMinutes != null && MainActivity.remainingTimeMinutes!! > 0) {
+                                        Text("定时(${MainActivity.remainingTimeMinutes})")
+                                    }
+                                    else{
+                                        Text("定时")
+                                    }
+                                }
+                            },
+                            onClick = { 
+                                showMenu = false
+                                showTimerDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("关于") },
+                            onClick = {
+                                showMenu = false
+                                // TODO: 实现关于功能
+                            }
+                        )
+                    }
                 }
             },
             modifier = Modifier.padding(bottom = 8.dp)
@@ -314,7 +502,7 @@ fun FileListScreen(
                 }
             } else {
                 items(files) { file ->
-                    FileListItem(
+                   FileListItem(
                         file = file,
                         onDelete = { 
                             scope.launch {
@@ -326,6 +514,23 @@ fun FileListScreen(
                 }
             }
         }
+    }
+    
+    if (showTimerDialog) {
+        (context as MainActivity).TimerDialog(
+            currentRemainingMinutes = MainActivity.remainingTimeMinutes,
+            onDismiss = { showTimerDialog = false },
+            onConfirm = { minutes ->
+                if(minutes > 0) {
+                    context.startTimer(minutes)
+                }
+                showTimerDialog = false
+            },
+            onStopTimer = {
+                context.stopTimer()
+                showTimerDialog = false
+            }
+        )
     }
 }
 

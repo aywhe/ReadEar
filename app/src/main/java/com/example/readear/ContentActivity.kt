@@ -1,7 +1,9 @@
 package com.example.readear
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -42,6 +44,7 @@ import androidx.core.net.toUri
 import com.example.readear.parser.TextChunk
 import com.example.readear.parser.TextManager
 import com.example.readear.parser.DefaultTextToSpeech
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 
 class ContentActivity : ComponentActivity() {
 
@@ -60,10 +63,26 @@ class ContentActivity : ComponentActivity() {
 
     // 当前阅读页码
     private var currentPageNumber: Int = 0
+    
+    // 定时器广播接收器
+    private val timerStopReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.example.readear.STOP_SPEAKING") {
+                stopSpeaking()
+                Toast.makeText(this@ContentActivity, "定时时间到，已停止播放", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // 注册广播接收器
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            timerStopReceiver,
+            IntentFilter("com.example.readear.STOP_SPEAKING")
+        )
 
         val fileUriString = intent.getStringExtra(EXTRA_FILE_URI) ?: ""
         val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "未知文件"
@@ -206,6 +225,9 @@ class ContentActivity : ComponentActivity() {
         speechManager = null
         isSpeaking = false
         isTTSAvailable = false
+        
+        // 注销广播接收器
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(timerStopReceiver)
     }
 
     private fun saveReadingProgress() {
