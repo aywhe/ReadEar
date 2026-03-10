@@ -212,7 +212,7 @@ class ContentActivity : ComponentActivity() {
         val fileUriString = intent.getStringExtra(EXTRA_FILE_URI) ?: return
         
         if (currentPageNumber >= 0) {
-            Log.d("ContentActivity", "💾 保存进度：页码 ${currentPageNumber + 1}, URI: $fileUriString")
+            Log.d("ContentActivity", "保存进度：页码 ${currentPageNumber + 1}, URI: $fileUriString")
             
             // 使用协程在后台线程执行保存操作
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
@@ -424,6 +424,31 @@ fun ContentScreen(
         }
     }
 
+    DisposableEffect(isFullScreen){
+        // 切换隐藏和显示ContentScreen的状态栏
+            if (isFullScreen) {
+                // 隐藏状态栏
+                androidx.core.view.WindowInsetsControllerCompat(
+                    (context as ComponentActivity).window,
+                    (context as ComponentActivity).window.decorView
+                ).hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+            } else {
+                // 显示状态栏
+                androidx.core.view.WindowInsetsControllerCompat(
+                    (context as ComponentActivity).window,
+                    (context as ComponentActivity).window.decorView
+                ).show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+            }
+
+        onDispose {
+            // 离开页面时恢复默认状态
+            androidx.core.view.WindowInsetsControllerCompat(
+                (context as ComponentActivity).window,
+                (context as ComponentActivity).window.decorView
+            ).show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+        }
+    }
+    
     // 定时保存进度：每 60 秒自动保存一次（修改为 1 分钟）
     DisposableEffect(Unit) {
         val autoSaveJob = lifecycleScope.launch {
@@ -449,36 +474,39 @@ fun ContentScreen(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = fileName,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "返回"
-                        )
-                    }
-                },
-                actions = {
-                    // 新增：直接显示页码信息，点击跳转到指定页面
-                    TextButton(
-                        onClick = { showJumpDialog = true },
-                        modifier = Modifier.padding(end = 16.dp)
-                    ) {
+            // 根据全屏模式决定是否显示 TopAppBar
+            if (!isFullScreen) {
+                TopAppBar(
+                    title = {
                         Text(
-                            text = "${pagerState.currentPage + 1}/$totalPages",
-                            style = MaterialTheme.typography.titleMedium
+                            text = fileName,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "返回"
+                            )
+                        }
+                    },
+                    actions = {
+                        // 新增：直接显示页码信息，点击跳转到指定页面
+                        TextButton(
+                            onClick = { showJumpDialog = true },
+                            modifier = Modifier.padding(end = 16.dp)
+                        ) {
+                            Text(
+                                text = "${pagerState.currentPage + 1}/$totalPages",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
                     }
-                }
 
-            )
+                )
+            }
         }
     ) { innerPadding ->
         Box(
