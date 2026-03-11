@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -408,6 +409,62 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * 设置对话框（独立可组合函数）
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsDialog(
+    onDismiss: () -> Unit,
+    onOpenTTSSettings: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("设置") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // TTS 设置按钮
+                Button(
+                    onClick = onOpenTTSSettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("设置 TTS")
+                }
+                
+                Text(
+                    text = "点击“设置 TTS”可跳转到系统文字转语音设置页面，选择您喜欢的 TTS 引擎（如讯飞、百度等）。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss
+            ) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+/**
+ * 打开系统 TTS 设置页面
+ */
+private fun openTTSSettings(context: Context) {
+    try {
+        // 使用 Intent 跳转到系统的 TTS 设置页面
+        val intent = Intent("com.android.settings.TTS_SETTINGS")
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        Toast.makeText(context, "无法打开 TTS 设置", Toast.LENGTH_SHORT).show()
+    }
+}
+
 data class FileItem(
     val fileName: String,
     val fileType: FileType,
@@ -435,6 +492,7 @@ fun FileListScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showTimerDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current as MainActivity
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -457,7 +515,7 @@ fun FileListScreen(
                             text = { Text("设置") },
                             onClick = {
                                 showMenu = false
-                                // TODO: 实现设置功能
+                                showSettingsDialog = true
                             }
                         )
                         DropdownMenuItem(
@@ -531,6 +589,16 @@ fun FileListScreen(
             onStopTimer = {
                 context.stopTimer()
                 showTimerDialog = false
+            }
+        )
+    }
+
+    if (showSettingsDialog) {
+        SettingsDialog(
+            onDismiss = { showSettingsDialog = false },
+            onOpenTTSSettings = {
+                openTTSSettings(context)
+                showSettingsDialog = false
             }
         )
     }
