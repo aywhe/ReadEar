@@ -13,6 +13,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -330,7 +332,7 @@ fun ContentScreen(
     )
 
     var showJumpDialog by remember { mutableStateOf(false) }
-    
+
     // 搜索相关状态
     var showSearchWindow by remember { mutableStateOf(false) }
 
@@ -706,7 +708,7 @@ fun ContentScreen(
             }
         )
     }
-    
+
     // 显示搜索窗口
     if (showSearchWindow) {
         DraggableSearchWindow(
@@ -963,7 +965,8 @@ fun DraggableSearchWindow(
     onDismiss: () -> Unit
 ) {
     val density = LocalDensity.current
-    var offset by remember { mutableStateOf(IntOffset(0, 0)) }
+    var offset by remember { mutableStateOf(IntOffset(0, with(density) { 200.dp.roundToPx() })) }
+    var searchQuery by remember { mutableStateOf("") }
 
     Box(
         modifier = Modifier
@@ -975,7 +978,6 @@ fun DraggableSearchWindow(
                 .offset {
                     IntOffset(offset.x, offset.y)
                 }
-                .align(Alignment.BottomCenter)
                 .pointerInput(Unit) {
                     detectDragGestures(
                         onDragStart = { },
@@ -989,56 +991,53 @@ fun DraggableSearchWindow(
                     )
                 }
                 .wrapContentWidth()
-                .wrapContentHeight(),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-            shape = MaterialTheme.shapes.medium
+                .wrapContentHeight()
+                .background(Color.White.copy(0.8f))
+                .border(
+                    width = 1.dp,
+                    color = Color.Gray.copy(alpha = 0.5f),
+                    shape = MaterialTheme.shapes.small
+                ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            shape = MaterialTheme.shapes.small
         ) {
             Row(
                 modifier = Modifier.padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 上一个按钮
-                Button(
-                    onClick = { },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    modifier = Modifier.height(36.dp)
-                ) {
-                    Text("上一个", fontSize = 12.sp)
-                }
 
-                // 下一个按钮
-                Button(
-                    onClick = { },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    modifier = Modifier.height(36.dp)
+                // 叉号按钮
+                IconButton(
+                    onClick = onDismiss
                 ) {
-                    Text("下一个", fontSize = 12.sp)
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "关闭"
+                    )
                 }
 
                 // 文本输入框
                 OutlinedTextField(
-                    value = "",
-                    onValueChange = { },
-                    placeholder = { Text("搜索内容", fontSize = 12.sp) },
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("搜索内容") },
                     singleLine = true,
                     maxLines = 1,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(40.dp),
-                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp)
+                    modifier = Modifier.weight(1f)
                 )
-
-                // 叉号按钮
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.size(32.dp)
+                // 上一个按钮
+                Button(
+                    onClick = { }
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "关闭",
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Text("上一个")
+                }
+
+                // 下一个按钮
+                Button(
+                    onClick = { }
+                ) {
+                    Text("下一个")
                 }
             }
         }
