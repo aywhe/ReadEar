@@ -712,7 +712,15 @@ fun ContentScreen(
     // 显示搜索窗口
     if (showSearchWindow) {
         DraggableSearchWindow(
-            onDismiss = { showSearchWindow = false }
+            onDismiss = { showSearchWindow = false },
+            onNavigateToPage = { targetPage ->
+                lifecycleScope.launch {
+                    pagerState.animateScrollToPage(targetPage)
+                }
+            },
+            currentPage = pagerState.currentPage,
+            textManager = textManager,
+            uri = uri.toString()
         )
     }
 }
@@ -962,11 +970,26 @@ fun DraggablePlayButton(
 
 @Composable
 fun DraggableSearchWindow(
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onNavigateToPage: (Int) -> Unit,
+    currentPage: Int,
+    textManager: TextManager,
+    uri: String
 ) {
     val density = LocalDensity.current
     var offset by remember { mutableStateOf(IntOffset(0, with(density) { 200.dp.roundToPx() })) }
     var searchQuery by remember { mutableStateOf("") }
+    var currentSearchPage by remember { mutableIntStateOf(currentPage) }
+    var totalPages by remember { mutableIntStateOf(0) }
+    var isSearching by remember { mutableStateOf(false) }
+    
+    val context = LocalContext.current
+    val lifecycleScope = rememberCoroutineScope()
+
+    // 同步当前页面
+    LaunchedEffect(currentPage) {
+        currentSearchPage = currentPage
+    }
 
     Box(
         modifier = Modifier
@@ -1028,18 +1051,292 @@ fun DraggableSearchWindow(
                 )
                 // 上一个按钮
                 Button(
-                    onClick = { }
+                    onClick = {
+                        if (searchQuery.isNotBlank() && uri.isNotEmpty()) {
+                            isSearching = true
+                            lifecycleScope.launch {
+                                searchPrevious(uri, searchQuery, currentSearchPage, textManager) { page, finished ->
+                                    if (page >= 0) {
+                                        currentSearchPage = page
+                                        onNavigateToPage(page)
+                                    }
+                                    isSearching = false
+                                }
+                            }
+                        }
+                    },
+                    enabled = searchQuery.isNotBlank() && !isSearching
                 ) {
                     Text("上一个")
                 }
 
                 // 下一个按钮
                 Button(
-                    onClick = { }
+                    onClick = {
+                        if (searchQuery.isNotBlank() && uri.isNotEmpty()) {
+                            isSearching = true
+                            lifecycleScope.launch {
+                                searchNext(uri, searchQuery, currentSearchPage, textManager) { page, finished ->
+                                    currentSearchPage = page
+                                    if (page >= 0) {
+                                        onNavigateToPage(page)
+                                    }
+                                    isSearching = false
+                                }
+                            }
+                        }
+                    },
+                    enabled = searchQuery.isNotBlank() && !isSearching
                 ) {
                     Text("下一个")
                 }
             }
         }
     }
+}
+
+/**
+ * 搜索下一页包含指定文本的页面
+ * @param uri 文件 URI
+ * @param searchText 搜索文本
+ * @param currentPage 当前页码
+ * @param textManager TextManager 实例
+ * @param onPageFound 找到页面时的回调，参数为找到的页码和是否完成搜索
+ */
+private suspend fun searchNext(
+    uri: String,
+    searchText: String,
+    currentPage: Int,
+    textManager: TextManager,
+    onPageFound: (Int, Boolean) -> Unit
+) {
+    try {
+        // 1. 获取 BooksCache 中的缓存
+        val pagesCache = com.example.readear.data.BooksCache.getCache(uri)
+        if (pagesCache == null) {
+            Log.w("ContentActivity", "未找到页面缓存：$uri")
+            onPageFound(-1, true)
+            return
+        }
+        
+        val totalPageCount = pagesCache.totalPages
+        if (totalPageCount == 0) {
+            Log.w("ContentActivity", "页面总数为 0")
+            onPageFound(-1, true)
+            return
+        }
+        
+        // 2. 从下一页开始搜索（不包含当前页）
+        var searchPage = currentPage + 1
+        Log.d("ContentActivity", "开始搜索下一页，起始页码：$searchPage，总页数：$totalPageCount")
+        
+        // 3. 如果已经是最后一页，提示用户
+        if (searchPage >= totalPageCount) {
+            Log.d("ContentActivity", "⚠ 已经是最后一页，无法继续向后搜索")
+            onPageFound(-1, true)
+            return
+        }
+        
+        // 4. 循环搜索每一页
+        while (searchPage < totalPageCount) {
+            // 5. 检查 SearchResults 中是否有该页的搜索结果
+            val searchResult = com.example.readear.data.SearchResults.getSearchResult(uri, searchText)
+            
+            val hasMatchInCache = searchResult?.getOrNull(searchPage)
+            
+            when {
+                // 6. 如果 SearchResults 中有明确结果（true 或 false）
+                hasMatchInCache != null -> {
+                    if (hasMatchInCache) {
+                        // 找到匹配页面
+                        Log.d("ContentActivity", "✓ SearchResults 中找到匹配页面：$searchPage")
+                        onPageFound(searchPage, true)
+                        return
+                    } else {
+                        // 该页不匹配，继续搜索下一页
+                        //Log.d("ContentActivity", "✗ SearchResults 显示页面 $searchPage 不匹配")
+                        searchPage++
+                    }
+                }
+                
+                // 7. 如果 SearchResults 中为 null，需要从 BooksCache 中搜索
+                else -> {
+                    val pageContent = pagesCache.getPage(searchPage)
+                    if (pageContent != null) {
+                        // 在页面内容中搜索文本
+                        val containsText = pageContent.content.contains(searchText, ignoreCase = true)
+                        
+                        // 更新 SearchResults
+                        updateSearchResults(uri, searchText, searchPage, containsText, totalPageCount)
+                        
+                        if (containsText) {
+                            // 找到匹配页面
+                            Log.d("ContentActivity", "✓ BooksCache 中找到匹配页面：$searchPage")
+                            onPageFound(searchPage, true)
+                            return
+                        } else {
+                            // 该页不匹配，继续搜索下一页
+                            Log.d("ContentActivity", "✗ BooksCache 中页面 $searchPage 不匹配")
+                            searchPage++
+                        }
+                    } else {
+                        // 页面内容为空，跳过
+                        Log.w("ContentActivity", "⚠ 页面 $searchPage 内容为空")
+                        searchPage++
+                    }
+                }
+            }
+        }
+        
+        // 8. 搜索完所有页面都没有找到
+        Log.d("ContentActivity", "⚠ 已搜索到最后一页，未找到匹配内容")
+        onPageFound(-1, true)
+        
+    } catch (e: Exception) {
+        Log.e("ContentActivity", "搜索失败：${e.message}", e)
+        onPageFound(-1, true)
+    }
+}
+
+/**
+ * 搜索上一页包含指定文本的页面
+ * @param uri 文件 URI
+ * @param searchText 搜索文本
+ * @param currentPage 当前页码
+ * @param textManager TextManager 实例
+ * @param onPageFound 找到页面时的回调，参数为找到的页码和是否完成搜索
+ */
+private suspend fun searchPrevious(
+    uri: String,
+    searchText: String,
+    currentPage: Int,
+    textManager: TextManager,
+    onPageFound: (Int, Boolean) -> Unit
+) {
+    try {
+        // 1. 获取 BooksCache 中的缓存
+        val pagesCache = com.example.readear.data.BooksCache.getCache(uri)
+        if (pagesCache == null) {
+            Log.w("ContentActivity", "未找到页面缓存：$uri")
+            onPageFound(-1, true)
+            return
+        }
+        
+        val totalPageCount = pagesCache.totalPages
+        if (totalPageCount == 0) {
+            Log.w("ContentActivity", "页面总数为 0")
+            onPageFound(-1, true)
+            return
+        }
+        
+        // 2. 从当前页的前一页开始搜索
+        var searchPage = currentPage - 1
+        Log.d("ContentActivity", "开始搜索上一页，起始页码：$searchPage，总页数：$totalPageCount")
+        // 3. 如果已经在第一页，提示用户
+        if (searchPage < 0) {
+            Log.d("ContentActivity", "⚠ 已经是第一页，无法继续向上搜索")
+            onPageFound(-1, true)
+            return
+        }
+        
+        // 4. 循环搜索每一页（向前搜索）
+        while (searchPage >= 0) {
+            // 5. 检查 SearchResults 中是否有该页的搜索结果
+            val searchResult = com.example.readear.data.SearchResults.getSearchResult(uri, searchText)
+            
+            val hasMatchInCache = searchResult?.getOrNull(searchPage)
+            
+            when {
+                // 6. 如果 SearchResults 中有明确结果（true 或 false）
+                hasMatchInCache != null -> {
+                    if (hasMatchInCache) {
+                        // 找到匹配页面
+                        Log.d("ContentActivity", "✓ SearchResults 中找到匹配页面：$searchPage")
+                        onPageFound(searchPage, true)
+                        return
+                    } else {
+                        // 该页不匹配，继续搜索上一页
+                        Log.d("ContentActivity", "✗ SearchResults 显示页面 $searchPage 不匹配")
+                        searchPage--
+                    }
+                }
+                
+                // 7. 如果 SearchResults 中为 null，需要从 BooksCache 中搜索
+                else -> {
+                    val pageContent = pagesCache.getPage(searchPage)
+                    if (pageContent != null) {
+                        // 在页面内容中搜索文本
+                        val containsText = pageContent.content.contains(searchText, ignoreCase = true)
+                        
+                        // 更新 SearchResults
+                        updateSearchResults(uri, searchText, searchPage, containsText, totalPageCount)
+                        
+                        if (containsText) {
+                            // 找到匹配页面
+                            Log.d("ContentActivity", "✓ BooksCache 中找到匹配页面：$searchPage")
+                            onPageFound(searchPage, true)
+                            return
+                        } else {
+                            // 该页不匹配，继续搜索上一页
+                            Log.d("ContentActivity", "✗ BooksCache 中页面 $searchPage 不匹配")
+                            searchPage--
+                        }
+                    } else {
+                        // 页面内容为空，跳过
+                        Log.w("ContentActivity", "⚠ 页面 $searchPage 内容为空")
+                        searchPage--
+                    }
+                }
+            }
+        }
+        
+        // 8. 搜索完所有页面都没有找到
+        Log.d("ContentActivity", "⚠ 已搜索到第一页，未找到匹配内容")
+        onPageFound(-1, true)
+        
+    } catch (e: Exception) {
+        Log.e("ContentActivity", "搜索失败：${e.message}", e)
+        onPageFound(-1, true)
+    }
+}
+
+/**
+ * 更新 SearchResults 中的搜索结果
+ * @param uri 文件 URI
+ * @param searchText 搜索文本
+ * @param pageNumber 页码
+ * @param contains 是否包含搜索文本
+ * @param totalPageCount 总页数
+ */
+private fun updateSearchResults(
+    uri: String,
+    searchText: String,
+    pageNumber: Int,
+    contains: Boolean,
+    totalPageCount: Int
+) {
+    // 获取现有的搜索结果
+    val existingResults = com.example.readear.data.SearchResults.getSearchResult(uri, searchText)
+    
+    // 创建或更新布尔列表
+    val updatedResults = if (existingResults == null) {
+        // 创建新的列表，初始化为 null
+        List(totalPageCount) { null }
+    } else {
+        // 复制现有列表
+        existingResults.toMutableList()
+    }.toMutableList()
+    
+    // 确保列表足够长
+    while (updatedResults.size < totalPageCount) {
+        updatedResults.add(null)
+    }
+    
+    // 更新当前页的结果
+    updatedResults[pageNumber] = contains
+    
+    // 保存回 SearchResults
+    com.example.readear.data.SearchResults.setSearchResult(uri, searchText, updatedResults)
+    
+    Log.d("ContentActivity", "更新 SearchResults: 页面 $pageNumber = $contains")
 }
