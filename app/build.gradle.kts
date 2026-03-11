@@ -90,6 +90,9 @@ dependencies {
     implementation("org.apache.poi:poi-ooxml:5.2.5")
     implementation("commons-io:commons-io:2.15.0")
     implementation("org.apache.commons:commons-compress:1.25.0")
+    
+    // 添加文件编码检测库
+    implementation("com.github.albfernandez:juniversalchardet:2.5.0")
 
     // 添加 MultiDex 支持
     //implementation("androidx.multidex:multidex:2.0.1")

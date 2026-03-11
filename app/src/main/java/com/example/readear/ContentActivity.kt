@@ -50,6 +50,7 @@ import com.example.readear.parser.TextChunk
 import com.example.readear.parser.TextManager
 import com.example.readear.parser.DefaultTextToSpeech
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.example.readear.data.BooksCache
 import com.example.readear.data.SearchResults
 
 class ContentActivity : ComponentActivity() {
@@ -368,7 +369,7 @@ fun ContentScreen(
         }
         // 1. 尝试获取阅读进度（设置超时，避免无限等待）
         var retryCount = 0
-        val maxProgressRetry = 10
+        val maxProgressRetry = 50
         var hasLoadedProgress = false
         while (lastReadingPage == null && retryCount < maxProgressRetry) {
             val progress = textManager.getLastReadPageNumber(uri.toString())
@@ -381,9 +382,31 @@ fun ContentScreen(
             }
         }
 
+        if(retryCount >= maxProgressRetry) {
+            Log.w("ContentActivity", "获取阅读进度超时，已尝试 $maxProgressRetry 次")
+        } else {
+            Log.d("ContentActivity", "成功获取阅读进度：$lastReadingPage")
+        }
         // 2. 如果没有获取到进度，设置为 0（从第一页开始）
         if (!hasLoadedProgress) {
+            Log.d("ContentActivity", "没有获取到进度，设置为 0")
             lastReadingPage = 0
+        }
+        // 等待直至页面总数大于 0，说明书籍已开始加载（设置超时，避免无限等待）
+        retryCount = 0
+        var pagesCount: Int? = null
+        while (retryCount < maxProgressRetry) {
+            pagesCount = BooksCache.getPagesCount(uri.toString())
+            if (pagesCount != null && pagesCount > 0) {
+                break
+            }
+            delay(10)
+            retryCount++
+        }
+        if(retryCount >= maxProgressRetry){
+            Log.w("ContentActivity", "等待书籍加载超时，已尝试 $maxProgressRetry 次")
+        } else {
+            Log.d("ContentActivity", "书籍已开始加载，总页数：$pagesCount")
         }
 
         // 标记初始化完成
