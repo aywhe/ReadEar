@@ -1406,7 +1406,7 @@ private suspend fun searchPrevious(
                         return
                     } else {
                         // 该页不匹配，继续搜索上一页
-                        Log.d("ContentActivity", "✗ SearchResults 显示页面 $searchPage 不匹配")
+                        //Log.d("ContentActivity", "✗ SearchResults 显示页面 $searchPage 不匹配")
                         searchPage--
                     }
                 }
