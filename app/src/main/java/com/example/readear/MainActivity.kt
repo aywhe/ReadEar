@@ -542,7 +542,7 @@ fun FileListScreen(
             text = {
                 Text(
                     text = """
-                        ReadEar - 智能听书助手 v1.1.0
+                        ReadEar - 智能听书助手 v1.0.0
                         
                         主要功能：
                         • 支持 TXT、DOCX、PDF 格式
