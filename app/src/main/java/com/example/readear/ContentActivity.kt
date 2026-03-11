@@ -623,11 +623,32 @@ fun ContentScreen(
                             val searchResult = SearchResults.getSearchResult(uri.toString(), query)
                             val currentMatch = searchResult?.getOrNull(page)
 
-                            // 只有当结果不为 null 时才更新（避免重复计算）
+                            // 当结果不为 null 时直接使用，为 null 时需要实时检查页面内容
                             if (currentMatch != null) {
                                 isHightLight.value = currentMatch
                             } else {
-                                isHightLight.value = false
+                                // SearchResults 中没有记录，需要实时检查 BooksCache 中的页面内容
+                                val pagesCache = com.example.readear.data.BooksCache.getCache(uri.toString())
+                                if (pagesCache != null) {
+                                    val pageContent = pagesCache.getPage(page)
+                                    if (pageContent != null) {
+                                        val containsText = pageContent.content.contains(query, ignoreCase = true)
+                                        isHightLight.value = containsText
+                                        
+                                        // 同时更新 SearchResults，避免下次重复检查
+                                        updateSearchResults(
+                                            uri.toString(),
+                                            query,
+                                            page,
+                                            containsText,
+                                            pagesCache.totalPages
+                                        )
+                                    } else {
+                                        isHightLight.value = false
+                                    }
+                                } else {
+                                    isHightLight.value = false
+                                }
                             }
                         }
 
