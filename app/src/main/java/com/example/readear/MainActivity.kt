@@ -112,7 +112,6 @@ class MainActivity : ComponentActivity() {
                         FileListScreen(
                             modifier = Modifier.fillMaxSize(),
                             files = fileList,
-                            onAddFileClick = { openSystemFilePicker() },
                             onDeleteFile = { file ->
                                 deleteFileFromList(file)
                                 // 清除对应的缓存和数据库数据
@@ -484,7 +483,6 @@ enum class FileType(val iconResId: Int) {
 fun FileListScreen(
     modifier: Modifier = Modifier,
     files: List<FileItem>,
-    onAddFileClick: () -> Unit,
     onDeleteFile: (FileItem) -> Unit = {},
     onFileClick: (FileItem) -> Unit = {}
 ) {
@@ -786,8 +784,7 @@ fun FileListScreenPreview() {
                     "content://com.android.providers.media.documents/document/text%3A11111",
                     1024 * 10
                 )
-            ),
-            onAddFileClick = {}
+            )
         )
     }
 }
