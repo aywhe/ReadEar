@@ -392,23 +392,6 @@ fun ContentScreen(
             Log.d("ContentActivity", "没有获取到进度，设置为 0")
             lastReadingPage = 0
         }
-        // 等待直至页面总数大于 0，说明书籍已开始加载（设置超时，避免无限等待）
-        retryCount = 0
-        var pagesCount: Int? = null
-        while (retryCount < maxProgressRetry) {
-            pagesCount = BooksCache.getPagesCount(uri.toString())
-            if (pagesCount != null && pagesCount > 0) {
-                break
-            }
-            delay(10)
-            retryCount++
-        }
-        if(retryCount >= maxProgressRetry){
-            Log.w("ContentActivity", "等待书籍加载超时，已尝试 $maxProgressRetry 次")
-        } else {
-            Log.d("ContentActivity", "书籍已开始加载，总页数：$pagesCount")
-        }
-
         // 标记初始化完成
         isInitializing = false
     }

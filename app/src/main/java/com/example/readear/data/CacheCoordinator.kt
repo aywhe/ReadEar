@@ -135,7 +135,6 @@ class CacheCoordinator(
      */
     suspend fun loadAllPagesToMemory(uri: String): Int {
         return withContext(Dispatchers.Default) {
-            val memoryCache = ensureMemoryCacheExists(uri)
 
             var startTime = System.currentTimeMillis()
             val allPages = try {
@@ -147,6 +146,7 @@ class CacheCoordinator(
             var totalTime = System.currentTimeMillis() - startTime
             Log.d("CacheCoordinator", "从数据库中加载所有页面耗时：${totalTime}ms, 页面数：${allPages.size}, URI: $uri")
 
+            val memoryCache = ensureMemoryCacheExists(uri)
             startTime = System.currentTimeMillis()
             allPages.forEach { page ->
                 memoryCache.addPage(
