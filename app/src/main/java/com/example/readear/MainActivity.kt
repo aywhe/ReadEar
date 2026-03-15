@@ -152,11 +152,10 @@ class MainActivity : ComponentActivity() {
         val existingIndex = fileList.indexOfFirst { it.fileUri == newFile.fileUri }
 
         fileList = if (existingIndex >= 0) {
-            val updatedList = fileList.toMutableList().apply {
+            fileList.toMutableList().apply {
                 removeAt(existingIndex)
                 add(0, newFile)
             }
-            updatedList
         } else {
             listOf(newFile) + fileList
         }
@@ -174,16 +173,37 @@ class MainActivity : ComponentActivity() {
             try {
                 val textManager = TextManager(applicationContext)
                 textManager.delBook(fileUri)
+                releaseUriPermission(fileUri)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
-                // 释放 URI 权限
-                try {
-                    val uri = Uri.parse(fileUri)
-                    contentResolver.releasePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                } catch (e: Exception) {
-                    // 忽略异常，可能权限本来就不存在
+    /**
+     * 释放 URI 权限
+     */
+    private fun releaseUriPermission(fileUri: String) {
+        try {
+            val uri = Uri.parse(fileUri)
+            contentResolver.releasePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (e: Exception) {
+            // 忽略异常，可能权限本来就不存在
+        }
+    }
+
+    private fun restoreFileList() {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                val restoredList = fileRepository.loadFileList()
+                restoredList.forEach { fileItem ->
+                    requestUriPermission(fileItem.fileUri)
+                }
+                with(kotlinx.coroutines.Dispatchers.Main) {
+                    fileList = restoredList
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -191,30 +211,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun restoreFileList() {
-        // 在后台协程中异步加载数据
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            try {
-                val restoredList = fileRepository.loadFileList()
-                // 为每个恢复的 URI 重新请求持久权限
-                restoredList.forEach { fileItem ->
-                    try {
-                        val uri = Uri.parse(fileItem.fileUri)
-                        contentResolver.takePersistableUriPermission(
-                            uri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION
-                        )
-                    } catch (e: Exception) {
-                        // 忽略异常
-                    }
-                }
-                // 切换回主线程更新 UI
-                with(kotlinx.coroutines.Dispatchers.Main) {
-                    fileList = restoredList
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+    /**
+     * 请求 URI 持久化权限
+     */
+    private fun requestUriPermission(fileUri: String) {
+        try {
+            val uri = Uri.parse(fileUri)
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (e: Exception) {
+            // 忽略异常
         }
     }
 
@@ -634,15 +642,19 @@ fun FileListScreen(
 
 private fun formatFileSize(size: Long): String {
     return when {
-        size < 1024 -> "$size B"
-        size < 1024 * 1024 -> "${size / 1024} KB"
-        size < 1024 * 1024 * 1024 -> "${size / (1024 * 1024)} MB"
-        else -> "${size / (1024 * 1024 * 1024)} GB"
+        size < 1024L -> "$size B"
+        size < 1024L * 1024L -> "${size / 1024L} KB"
+        size < 1024L * 1024L * 1024L -> "${size / (1024L * 1024L)} MB"
+        else -> "${size / (1024L * 1024L * 1024L)} GB"
     }
 }
 
 @Composable
-fun FileListItem(file: FileItem, onDelete: suspend () -> Unit, onClick: () -> Unit = {}) {
+fun FileListItem(
+    file: FileItem,
+    onDelete: suspend () -> Unit,
+    onClick: () -> Unit = {}
+) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -673,7 +685,7 @@ fun FileListItem(file: FileItem, onDelete: suspend () -> Unit, onClick: () -> Un
                     style = MaterialTheme.typography.bodyLarge
                 )
 
-                if (file.fileSize > 0) {
+                if (file.fileSize > 0L) {
                     Text(
                         text = formatFileSize(file.fileSize),
                         style = MaterialTheme.typography.bodySmall,
@@ -682,7 +694,6 @@ fun FileListItem(file: FileItem, onDelete: suspend () -> Unit, onClick: () -> Un
                 }
             }
 
-            // 删除按钮只在编辑模式下显示（这里简化为始终显示）
             IconButton(onClick = { showDeleteDialog = true }) {
                 Icon(
                     imageVector = Icons.Default.Add,

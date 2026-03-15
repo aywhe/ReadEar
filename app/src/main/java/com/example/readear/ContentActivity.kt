@@ -152,7 +152,6 @@ class ContentActivity : ComponentActivity() {
             }
         }
 
-        // 设置错误回调
         speechManager?.onTTSError = { error ->
             Log.e("ContentActivity", "TTS 错误：$error")
             showTTSSettingsDialog()
@@ -173,33 +172,23 @@ class ContentActivity : ComponentActivity() {
             Log.w("ContentActivity", "播放内容为空")
         }
     }
-
     private fun stopSpeaking() {
         speechManager?.stopSpeaking()
     }
 
     /**
      * 确保已获取 URI 的持久化读取权限
-     * 如果已存在则跳过，避免重复申请
-     *
-     * @param uri 需要访问的文件 URI
      */
     private fun ensurePersistedUriPermission(uri: Uri) {
         try {
-            // 检查是否已经有持久化权限
-            val hasPermission = contentResolver.persistedUriPermissions.any {
-                it.uri == uri && it.isReadPermission
-            }
-
-            // 如果没有权限，才申请新的
-            if (!hasPermission) {
+            if (!contentResolver.persistedUriPermissions.any {
+                    it.uri == uri && it.isReadPermission
+                }) {
                 contentResolver.takePersistableUriPermission(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             }
-        } catch (e: SecurityException) {
-            e.printStackTrace()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -225,17 +214,14 @@ class ContentActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // 释放 URI 权限（可选，根据需求决定）
         saveReadingProgress()
         releasePersistedUriPermission()
 
-        // 释放 TTS 资源（注意：不释放单例，只重置状态）
         speechManager?.stopSpeaking()
         speechManager = null
         isSpeaking = false
         isTTSAvailable = false
 
-        // 注销广播接收器
         LocalBroadcastManager.getInstance(this).unregisterReceiver(timerStopReceiver)
     }
 
@@ -245,10 +231,8 @@ class ContentActivity : ComponentActivity() {
         if (currentPageNumber >= 0) {
             Log.d("ContentActivity", "保存进度：页码 ${currentPageNumber + 1}, URI: $fileUriString")
 
-            // 使用协程在后台线程执行保存操作
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                 try {
-                    // 方案 1：在 Activity 中创建独立的 TextManager 实例，用于保存进度
                     val textManager = TextManager(applicationContext)
                     textManager.saveReadingProgress(fileUriString, currentPageNumber)
                     Log.d("ContentActivity", "进度保存成功")
@@ -256,8 +240,6 @@ class ContentActivity : ComponentActivity() {
                     Log.e("ContentActivity", "保存进度失败：${e.message}", e)
                 }
             }
-        } else {
-            Log.w("ContentActivity", "跳过保存：currentPageNumber = $currentPageNumber")
         }
     }
 
@@ -348,7 +330,7 @@ fun ContentScreen(
     }
 
     // TextManager 实例（使用 remember 避免重复创建）
-    val textManager = remember(context) { TextManager(context.applicationContext as Context) }
+    val textManager = remember(context) { TextManager(context.applicationContext) }
 
 
     // 启动初始化：同步内存数据并恢复上次阅读位置
