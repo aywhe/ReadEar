@@ -3,6 +3,7 @@ package com.example.readear
 import android.app.Application
 import com.example.readear.data.BooksCache
 import com.example.readear.data.SearchResults
+import com.example.readear.parser.DefaultTextToSpeech
 
 /**
  * 全局 Application 类
@@ -24,6 +25,8 @@ class ReadEarApplication : Application() {
         // 清理所有缓存
         BooksCache.clearAllCache()
         SearchResults.clearAllSearchResults()
+        // 清理tts资源
+        DefaultTextToSpeech.getInstance(applicationContext).release()
     }
     
     override fun onLowMemory() {
@@ -32,5 +35,7 @@ class ReadEarApplication : Application() {
         // 可以选择清理缓存以释放内存
         BooksCache.clearAllCache()
         SearchResults.clearAllSearchResults()
+        // 清理tts资源
+        DefaultTextToSpeech.getInstance(applicationContext).release()
     }
 }
