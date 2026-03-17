@@ -388,7 +388,7 @@ class MainActivity : ComponentActivity() {
             },
             dismissButton = {
                 Row {
-                    OutlinedButton(onClick = onDismiss) {
+                    TextButton(onClick = onDismiss) {
                         Text("取消")
                     }
 

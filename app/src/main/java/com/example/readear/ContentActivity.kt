@@ -622,7 +622,7 @@ fun ContentScreen(
                                     if (pageContent != null) {
                                         val containsText = pageContent.content.contains(query, ignoreCase = true)
                                         isHightLight.value = containsText
-                                        
+
                                         // 同时更新 SearchResults，避免下次重复检查
                                         updateSearchResults(
                                             uri.toString(),
@@ -797,7 +797,7 @@ fun PageContent(
     val defaultFontSize = 16.sp // 固定字体大小
     val baseLineHeight = 24.sp // 固定行高
     val scaledLineHeight = baseLineHeight * 1.5f // 1.5 倍行距
-    
+
     // 获取搜索关键词（从 SearchResults 中获取当前 URI 的查询）
     // 注意：这里需要传递 query 参数才能高亮，我们稍后修改
     // 构建带高亮的文本
@@ -1011,7 +1011,13 @@ private fun JumpToPageDialog(
             }
             // 搜索按钮
             Spacer(modifier = Modifier.width(8.dp))
-            OutlinedButton(onClick = onSearchClick) {
+            Button(
+                onClick = onSearchClick,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = Color.White
+                )
+            ) {
                 Text("搜索")
             }
         }
@@ -1079,7 +1085,7 @@ fun DraggableSearchWindow(
     var searchQuery by remember { mutableStateOf("") }
     var totalPages by remember { mutableIntStateOf(0) }
     var isSearching by remember { mutableStateOf(false) }
-    
+
     val context = LocalContext.current
     val lifecycleScope = rememberCoroutineScope()
 
