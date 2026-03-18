@@ -159,7 +159,8 @@ class ContentActivity : ComponentActivity() {
     }
 
     private fun playText(text: String) {
-        if (text.isNotEmpty()) {
+        val readingText = text.trim()
+        if (readingText.isNotEmpty()) {
             currentTextToSpeak = text
             Log.d("ContentActivity", "开始播放文本：${text.length} 字符")
 
@@ -170,6 +171,7 @@ class ContentActivity : ComponentActivity() {
             }
         } else {
             Log.w("ContentActivity", "播放内容为空")
+            Toast.makeText(this, "播放内容为空", Toast.LENGTH_SHORT).show()
         }
     }
     private fun stopSpeaking() {
@@ -426,11 +428,47 @@ fun ContentScreen(
     }
     LaunchedEffect(isPlayDone) {
         if (isPlayDone) {
-            // 播放完成后自动跳转到下一页
-            val nextPageContent = textManager.getPage(uri.toString(), currentSpeakingPage + 1)
-            if (nextPageContent != null) {
+            var nextPageContent: TextChunk? = null
+            var foundValidPage = false
+            var retryCount = 0
+            val maxRetryCount = 10  // 最多等待 10 次（0.2 秒）
+
+            // 查找下一个非空白页，最多尝试到最后一页
+            while (!foundValidPage && currentSpeakingPage < totalPages - 1 && retryCount < maxRetryCount) {
                 currentSpeakingPage++
+                nextPageContent = textManager.getPage(uri.toString(), currentSpeakingPage)
+
+                when {
+                    nextPageContent == null -> {
+                        // 页面未加载完成，回退页码并等待重试
+                        currentSpeakingPage--  // 回退，下次循环重新检查这一页
+                        retryCount++
+                        Log.w("ContentActivity", "⚠ 页面 $currentSpeakingPage 未加载完成，等待重试 ($retryCount/$maxRetryCount)")
+                        delay(20)
+                    }
+                    nextPageContent.content.isNotBlank() -> {
+                        // 找到有效页面
+                        foundValidPage = true
+                        Log.d("ContentActivity", "✓ 找到下一个有效页面：$currentSpeakingPage")
+                    }
+                    else -> {
+                        // 页面是空白页，跳过
+                        retryCount = 0  // 重置重试计数
+                        Log.d("ContentActivity", "⚠ 跳过空白页：$currentSpeakingPage")
+                    }
+                }
+            }
+
+            // 只有找到有效页面才播放
+            if (foundValidPage && nextPageContent != null) {
                 onPlayText(nextPageContent.content)
+
+                // 同步 Pager 状态，确保显示正确的页面
+                if (currentSpeakingPage != pagerState.currentPage) {
+                    pagerState.scrollToPage(currentSpeakingPage)
+                }
+            } else {
+                Log.d("ContentActivity", "已到达最后一个有效页面")
             }
         }
     }
