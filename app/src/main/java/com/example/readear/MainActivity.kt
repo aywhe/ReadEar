@@ -529,6 +529,19 @@ fun FileListScreen(
         Log.d("MainActivity", "Moving FileListItem from ${from.index} to ${to.index}") // 添加日志
         onMoveFile(from.index, to.index)
     }, canDragOver = { _, _ -> true })
+    
+    // 2. 记录之前的列表大小
+    var previousSize by remember { mutableStateOf(0) }
+    
+    // 3. 监听文件列表变化，智能判断是否需要滚动到顶部
+    LaunchedEffect(files.size, files.firstOrNull()?.fileUri) {
+        if (files.isNotEmpty() && previousSize > 0) {
+            // 只有在非首次加载且列表大小未减少时才滚动
+            // 包括：新增文件、文件移动到顶部
+            reorderableState.listState.scrollToItem(0)
+        }
+        previousSize = files.size
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
