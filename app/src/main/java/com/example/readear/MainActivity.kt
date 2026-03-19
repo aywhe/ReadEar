@@ -13,6 +13,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -31,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -609,10 +609,12 @@ fun FileListScreen(
                         reorderableState = reorderableState,
                         key = file.fileUri,
                     ) { isDragging ->
-
-                        val elevation = if (isDragging) 8.dp else 2.dp
-                        val scale = if (isDragging) 1.05f else 1f
-
+                        // 使用 animateFloatAsState 实现平滑的缩放动画
+                        val animatedScale by animateFloatAsState(
+                            targetValue = if (isDragging) 1.05f else 1f,
+                            label = "scale"
+                        )
+                        
                         FileListItem(
                             file = file,
                             onDelete = {
@@ -624,7 +626,7 @@ fun FileListScreen(
                             modifier = Modifier
                                 .animateItem() // 添加动画
                                 .zIndex(if (isDragging) 1f else 0f) // 确保拖拽项在最上层
-                                .scale(scale)
+                                .scale(animatedScale)
                         )
                     }
                 }
@@ -666,7 +668,7 @@ fun FileListScreen(
             text = {
                 Text(
                     text = """
-                        ReadEar - 智能听书助手 v1.2.0
+                        ReadEar - 智能听书助手 v1.2.1
                         
                         主要功能：
                         • 支持 TXT、DOCX、PDF 格式
