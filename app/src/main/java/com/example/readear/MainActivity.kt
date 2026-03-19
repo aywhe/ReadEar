@@ -13,6 +13,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
@@ -598,18 +599,21 @@ fun FileListScreen(
                     key = { index -> files[index].fileUri } // 必须唯一 Key
                 ) { index ->
                     val file = files[index]
-                    
+                    Log.d("Reorder", "Rendering file: ${file.fileUri} at index: $index") // 添加日志
                     // 3. 使用 ReorderableItem 包裹你的列表项
                     ReorderableItem(
                         reorderableState = reorderableState,
-                        key = file.fileUri,
+                        key = index,
                     ) { isDragging ->
                         Log.d("Reorder", "isDragging: $isDragging for file: ${file.fileName}") // 添加日志
                         FileListItem(
                             file = file,
                             isDragging = isDragging,
                             onDelete = { onDeleteFile(file) },
-                            onClick = { onFileClick(file) }
+                            onClick = { onFileClick(file) },
+                            modifier = Modifier
+                                .animateItem() // 添加动画
+                                .zIndex(if (isDragging) 1f else 0f) // 确保拖拽项在最上层
                         )
                     }
                 }
