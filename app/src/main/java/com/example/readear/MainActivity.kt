@@ -526,7 +526,7 @@ fun FileListScreen(
     // 1. 创建重排序状态
     // onMove: 当用户拖动完成或过程中需要交换数据时调用
     val reorderableState = rememberReorderableLazyListState(onMove = { from, to ->
-        Log.d("MainActivity", "Moving from ${from.index} to ${to.index}") // 添加日志
+        Log.d("MainActivity", "Moving FileListItem from ${from.index} to ${to.index}") // 添加日志
         onMoveFile(from.index, to.index)
     }, canDragOver = { _, _ -> true })
 
