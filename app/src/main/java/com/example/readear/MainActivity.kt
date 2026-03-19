@@ -25,11 +25,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
+import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -521,7 +523,7 @@ fun FileListScreen(
     // 1. 创建重排序状态
     // onMove: 当用户拖动完成或过程中需要交换数据时调用
     val reorderableState = rememberReorderableLazyListState(onMove = { from, to ->
-        Log.d("Reorder", "Moving from ${from.index} to ${to.index}") // 添加日志
+        Log.d("MainActivity", "Moving from ${from.index} to ${to.index}") // 添加日志
         onMoveFile(from.index, to.index)
     }, canDragOver = { _, _ -> true })
 
@@ -580,7 +582,9 @@ fun FileListScreen(
             state = reorderableState.listState, // 绑定重排序状态
             modifier = Modifier
                 .fillMaxSize()
-                .reorderable(reorderableState), // 关键：启用重排序功能
+                .reorderable(reorderableState) // 关键：启用重排序功能
+                .detectReorderAfterLongPress(reorderableState)
+            ,
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -599,21 +603,28 @@ fun FileListScreen(
                     key = { index -> files[index].fileUri } // 必须唯一 Key
                 ) { index ->
                     val file = files[index]
-                    Log.d("Reorder", "Rendering file: ${file.fileUri} at index: $index") // 添加日志
+                    Log.d("MainActivity", "Rendering file: ${file.fileUri} at index: $index") // 添加日志
                     // 3. 使用 ReorderableItem 包裹你的列表项
                     ReorderableItem(
                         reorderableState = reorderableState,
-                        key = index,
+                        key = file.fileUri,
                     ) { isDragging ->
-                        Log.d("Reorder", "isDragging: $isDragging for file: ${file.fileName}") // 添加日志
+
+                        val elevation = if (isDragging) 8.dp else 2.dp
+                        val scale = if (isDragging) 1.05f else 1f
+
                         FileListItem(
                             file = file,
-                            isDragging = isDragging,
-                            onDelete = { onDeleteFile(file) },
+                            onDelete = {
+                                scope.launch {
+                                    onDeleteFile(file)
+                                }
+                            },
                             onClick = { onFileClick(file) },
                             modifier = Modifier
                                 .animateItem() // 添加动画
                                 .zIndex(if (isDragging) 1f else 0f) // 确保拖拽项在最上层
+                                .scale(scale)
                         )
                     }
                 }
@@ -691,28 +702,21 @@ private fun formatFileSize(size: Long): String {
 @Composable
 fun FileListItem(
     file: FileItem,
-    isDragging: Boolean,
     onDelete: suspend () -> Unit,
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    
-    val elevation = if (isDragging) 8.dp else 2.dp
-    val scale = if (isDragging) 1.05f else 1f
+
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .zIndex(if (isDragging) 1f else 0f)
-            .scale(scale),
-        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
-        ),
-	onClick = onClick
+        ,
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier
