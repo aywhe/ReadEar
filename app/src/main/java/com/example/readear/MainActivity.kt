@@ -35,6 +35,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.zIndex
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
@@ -44,6 +45,8 @@ import com.example.readear.ui.theme.ReadEarTheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import org.burnoutcrew.reorderable.*
+import androidx.core.net.toUri
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "file_list")
 
@@ -92,6 +95,9 @@ class MainActivity : ComponentActivity() {
 
     private var fileList by mutableStateOf<List<FileItem>>(emptyList())
     private lateinit var fileRepository: FileRepository
+    
+    // 新增：用于控制拖拽状态
+    private var isDragging by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -116,10 +122,19 @@ class MainActivity : ComponentActivity() {
                                 deleteFileFromList(file)
                                 // 清除对应的缓存和数据库数据
                                 clearBookData(file.fileUri)
-                                FileRepository(applicationContext).saveFileList(fileList)
+                                fileRepository.saveFileList(fileList)
                             },
                             onFileClick = { file ->
                                 openContentActivity(file)
+                            },
+                            onMoveFile = { from, to ->
+                                // 数据层交换
+                                val newList = fileList.toMutableList()
+                                val item = newList.removeAt(from)
+                                newList.add(to, item)
+                                fileList = newList
+                                // 保存
+                                fileRepository.saveFileList(fileList)
                             }
                         )
                         DraggableFloatingButton(
@@ -216,7 +231,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun requestUriPermission(fileUri: String) {
         try {
-            val uri = Uri.parse(fileUri)
+            val uri = fileUri.toUri()
             contentResolver.takePersistableUriPermission(
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -492,7 +507,8 @@ fun FileListScreen(
     modifier: Modifier = Modifier,
     files: List<FileItem>,
     onDeleteFile: (FileItem) -> Unit = {},
-    onFileClick: (FileItem) -> Unit = {}
+    onFileClick: (FileItem) -> Unit = {},
+    onMoveFile: (Int, Int) -> Unit = {_,_->}
 ) {
     val scope = rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
@@ -500,6 +516,12 @@ fun FileListScreen(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current as MainActivity
+    // 1. 创建重排序状态
+    // onMove: 当用户拖动完成或过程中需要交换数据时调用
+    val reorderableState = rememberReorderableLazyListState(onMove = { from, to ->
+        Log.d("Reorder", "Moving from ${from.index} to ${to.index}") // 添加日志
+        onMoveFile(from.index, to.index)
+    }, canDragOver = { _, _ -> true })
 
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
@@ -553,9 +575,12 @@ fun FileListScreen(
         )
 
         LazyColumn(
+            state = reorderableState.listState, // 绑定重排序状态
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            // 关键：添加这个修饰符让 LazyColumn 不拦截拖动手势
+            userScrollEnabled = true
         ) {
             if (files.isEmpty()) {
                 item {
@@ -567,16 +592,30 @@ fun FileListScreen(
                     )
                 }
             } else {
-                items(files) { file ->
-                    FileListItem(
-                        file = file,
-                        onDelete = {
-                            scope.launch {
-                                onDeleteFile(file)
-                            }
-                        },
-                        onClick = { onFileClick(file) }
-                    )
+	        items(
+                    count = files.size,
+                    key = { index -> files[index].fileUri } // 必须唯一 Key
+                ) { index ->
+                    val file = files[index]
+                    
+                    // 3. 使用 ReorderableItem 包裹你的列表项
+                    ReorderableItem(
+                        reorderableState = reorderableState,
+                        key = file.fileUri,
+                    ) { isDragging ->
+                        val elevation = if (isDragging) 8.dp else 2.dp
+                        val scale = if (isDragging) 1.05f else 1f
+                        
+                        FileListItem(
+                            file = file,
+                            isDragging = isDragging,
+                            onDelete = { onDeleteFile(file) },
+                            onClick = { onFileClick(file) },
+                            modifier = Modifier
+                                .animateItem() // 自动动画
+                                .zIndex(if (isDragging) 1f else 0f)
+                        )
+                    }
                 }
             }
         }
@@ -652,18 +691,23 @@ private fun formatFileSize(size: Long): String {
 @Composable
 fun FileListItem(
     file: FileItem,
+    isDragging: Boolean,
     onDelete: suspend () -> Unit,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        onClick = onClick
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDragging) 8.dp else 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
+        ),
+	onClick = onClick
     ) {
         Row(
             modifier = Modifier
