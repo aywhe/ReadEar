@@ -28,6 +28,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -576,11 +577,11 @@ fun FileListScreen(
 
         LazyColumn(
             state = reorderableState.listState, // 绑定重排序状态
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .reorderable(reorderableState), // 关键：启用重排序功能
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            // 关键：添加这个修饰符让 LazyColumn 不拦截拖动手势
-            userScrollEnabled = true
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (files.isEmpty()) {
                 item {
@@ -603,17 +604,12 @@ fun FileListScreen(
                         reorderableState = reorderableState,
                         key = file.fileUri,
                     ) { isDragging ->
-                        val elevation = if (isDragging) 8.dp else 2.dp
-                        val scale = if (isDragging) 1.05f else 1f
-                        
+                        Log.d("Reorder", "isDragging: $isDragging for file: ${file.fileName}") // 添加日志
                         FileListItem(
                             file = file,
                             isDragging = isDragging,
                             onDelete = { onDeleteFile(file) },
-                            onClick = { onFileClick(file) },
-                            modifier = Modifier
-                                .animateItem() // 自动动画
-                                .zIndex(if (isDragging) 1f else 0f)
+                            onClick = { onFileClick(file) }
                         )
                     }
                 }
@@ -698,12 +694,17 @@ fun FileListItem(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    
+    val elevation = if (isDragging) 8.dp else 2.dp
+    val scale = if (isDragging) 1.05f else 1f
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isDragging) 8.dp else 2.dp),
+            .padding(vertical = 4.dp)
+            .zIndex(if (isDragging) 1f else 0f)
+            .scale(scale),
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
         colors = CardDefaults.cardColors(
             containerColor = if (isDragging) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
         ),
