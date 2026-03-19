@@ -13,7 +13,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -617,6 +620,7 @@ fun FileListScreen(
                         
                         FileListItem(
                             file = file,
+                            isDragging = isDragging,
                             onDelete = {
                                 scope.launch {
                                     onDeleteFile(file)
@@ -704,13 +708,23 @@ private fun formatFileSize(size: Long): String {
 @Composable
 fun FileListItem(
     file: FileItem,
+    isDragging: Boolean = false,
     onDelete: suspend () -> Unit,
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showDeleteButton by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-
+    
+    LaunchedEffect(isDragging) {
+        if (isDragging) {
+            showDeleteButton = true
+        } else {
+            kotlinx.coroutines.delay(5000)
+            showDeleteButton = false
+        }
+    }
 
     Card(
         modifier = modifier
@@ -748,13 +762,19 @@ fun FileListItem(
                     )
                 }
             }
-
-            IconButton(onClick = { showDeleteDialog = true }) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "删除",
-                    modifier = Modifier.rotate(45f)
-                )
+            AnimatedVisibility(
+                visible = showDeleteButton,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ){
+            // 根据 showDeleteButton 状态控制删除按钮显示
+                IconButton(onClick = { showDeleteDialog = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "删除",
+                        modifier = Modifier.rotate(45f)
+                    )
+                }
             }
         }
     }
