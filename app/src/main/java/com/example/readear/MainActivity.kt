@@ -626,7 +626,11 @@ fun FileListScreen(
                                     onDeleteFile(file)
                                 }
                             },
-                            onClick = { onFileClick(file) },
+                            onClick = {
+                                if(!isDragging) {
+                                    onFileClick(file)
+                                }
+                            },
                             modifier = Modifier
                                 .animateItem() // 添加动画
                                 .zIndex(if (isDragging) 1f else 0f) // 确保拖拽项在最上层
@@ -768,7 +772,7 @@ fun FileListItem(
                 exit = fadeOut()
             ){
             // 根据 showDeleteButton 状态控制删除按钮显示
-                IconButton(onClick = { showDeleteDialog = true }) {
+                IconButton(modifier = Modifier.animateEnterExit(),onClick = { showDeleteDialog = true }) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "删除",
