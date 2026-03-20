@@ -1142,9 +1142,9 @@ fun DraggablePlayButton(
                             )
                             // 只有在正在播放时才更新拖动记录和检测摇晃，避免在非播放状态下频繁计算
                             if(isSpeaking) {
-                                updateDragQueue(dragQueue, offset, System.currentTimeMillis())
-
                                 val currentTime = System.currentTimeMillis()
+                                updateDragQueue(dragQueue, offset, currentTime)
+
                                 if (currentTime - lastShakeCheckTime > 50) { // 每 50ms 检查一次
                                     shakeCheckResult = checkIfShake(dragQueue)
                                     lastShakeCheckTime = currentTime
