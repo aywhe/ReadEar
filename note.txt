@@ -1,3 +1,7 @@
+- ContentActivity 中 ContentScreen 调用 DraggablePlayButton， 回调函数 onShake 时 isSpeaking 一直都是 false
+解决办法： DraggablePlayButton 中的包含 onDrag 的 pointerInput 的参数 Unit 改为 onShake, isSpeaking, onClick, onStop
+不然 pointerInput 不会更新，导致 onShake 中的 isSpeaking 一直都是 false
+
 - 创建tts总是失败，status = -1
 override fun onInit(status: Int) {
         Log.d("ContentActivity", "TTS 初始化状态：$status")

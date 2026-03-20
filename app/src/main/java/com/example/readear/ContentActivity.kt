@@ -779,12 +779,11 @@ fun ContentScreen(
                         },
                         onStop = { onStopSpeaking() },
                         onShake = {
-                            // 这里 isSpeaking一直是false，找不到原因
-                            Log.d("DraggablePlayButton", "检测到摇晃，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}")
+                            Log.d("DraggablePlayButton", "检测到按钮晃动，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}")
                             if (isSpeaking && currentSpeakingPage != pagerState.currentPage) {
                                 lifecycleScope.launch {
+                                    Log.d("DraggablePlayButton", "按钮晃动后跳转到当前播放页面：${pagerState.currentPage} -> $currentSpeakingPage")
                                     pagerState.scrollToPage(currentSpeakingPage)
-                                    Log.d("DraggablePlayButton", "摇晃后跳转到当前播放页面：$currentSpeakingPage")
                                 }
                             }
                         }
@@ -890,7 +889,7 @@ fun PageContent(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
-            .pointerInput(Unit) {
+            .pointerInput(chunk) {
                 detectTapGestures(
                     onDoubleTap = { onDoubleTap() },
                     onLongPress = { offset ->
@@ -1089,8 +1088,11 @@ fun DraggablePlayButton(
 ) {
     var offset by remember { mutableStateOf(IntOffset.Zero) }
 
-    val dragQueue = remember { ArrayDeque<OffsetTimestamp>() }
+    val dragState = remember { DragState () }
     var isShaking by remember { mutableStateOf(false) }
+    // 在 DraggablePlayButton 中添加缓存状态
+    var shakeCheckResult by remember { mutableStateOf(false) }
+    var lastShakeCheckTime by remember { mutableStateOf(0L) }
 
     // 检测到摇晃后，设置 isOnShake 为 true，并在 1 秒后重置为 false，避免连续触发
     LaunchedEffect(isShaking){
@@ -1118,7 +1120,7 @@ fun DraggablePlayButton(
             contentColor = Color.White,
             modifier = Modifier
                 .offset { offset }
-                .pointerInput(Unit) {
+                .pointerInput(onShake, isSpeaking, onClick, onStop) {
                     detectDragGestures(
                         onDragStart = {},
                         onDrag = { change, dragAmount ->
@@ -1127,9 +1129,16 @@ fun DraggablePlayButton(
                                 dragAmount.x.toInt(),
                                 dragAmount.y.toInt()
                             )
-                            updateDragQueue(dragQueue, offset, System.currentTimeMillis())
-                            if(!isShaking && checkIfShake(dragQueue)){
-                                Log.d("DraggablePlayButton", "检测到摇晃，触发 onShake()")
+
+                            updateDragQueue(dragState, offset, System.currentTimeMillis())
+
+                            val currentTime = System.currentTimeMillis()
+                            if (currentTime - lastShakeCheckTime > 50) { // 每 50ms 检查一次
+                                shakeCheckResult = checkIfShake(dragState)
+                                lastShakeCheckTime = currentTime
+                            }
+
+                            if (!isShaking && shakeCheckResult) {
                                 isShaking = true
                                 onShake()
                             }
@@ -1159,17 +1168,24 @@ data class OffsetTimestamp(
     val dx: Float = 0f, // 当前段的 dx
     val dy: Float = 0f // 当前段的 dy
 )
+
+data class DragState(
+    var dragQueue: ArrayDeque<OffsetTimestamp> = ArrayDeque(),
+    var totalDistance: Float = 0f, // 总距离
+    var peakAcceleration: Float = 0f, // 峰值加速度
+    var directionChanges: Int = 0, // 方向反转次数
+)
 /**
  * 更新拖动记录队列，保留最近 800ms 内的记录，并限制队列大小
  *
- * @param queue 当前的拖动记录队列
+ * @param state 当前的拖动记录
  * @param newOffset 新的拖动偏移和时间戳
  * @param timeIntervalMs 最小时间间隔，单位毫秒（默认 16ms）
  * @param expiryTimeMs 记录过期时间，单位毫秒（默认 800ms）
  * @param maxQueueSize 队列最大大小，超过后删除最旧记录（默认 50）
  */
 fun updateDragQueue(
-    queue: ArrayDeque<OffsetTimestamp>,
+    state: DragState = DragState(),
     newOffset: IntOffset,
     currentTime: Long,
     timeIntervalMs: Long = 16,
@@ -1220,18 +1236,18 @@ fun updateDragQueue(
 /**
  * 检查拖动记录队列是否符合摇晃手势的特征
  *
- * @param queue 拖动记录队列，包含偏移、时间戳、速度、加速度等信息
+ * @param state 拖动记录，包含偏移、时间戳、速度、加速度等信息
  * @param totalDistanceThreshold 总路径长度阈值，单位像素（默认 500px）
  * @param startToEndDistanceThreshold 起点到终点距离阈值，单位像素（默认 300px）
- * @param accelerationThreshold 峰值加速度阈值，单位像素/秒²（默认 150*1000px/s²）
+ * @param accelerationThreshold 峰值加速度阈值，单位像素/秒²（默认 120*1000px/s²）
  * @param directionChangesThreshold 方向反转次数阈值（默认 2次）
  * @return 是否检测到摇晃手势
  */
 fun checkIfShake(
-    queue: ArrayDeque<OffsetTimestamp>,
+    state: DragState = DragState(),
     totalDistanceThreshold: Float = 500f,
     startToEndDistanceThreshold: Float = 300f,
-    accelerationThreshold: Float = 150*1000f,
+    accelerationThreshold: Float = 120*1000f,
     directionChangesThreshold: Int = 2
 ): Boolean {
     if (queue.size < 3) return false
