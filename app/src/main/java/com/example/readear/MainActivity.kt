@@ -538,7 +538,9 @@ fun FileListScreen(
         if (files.isNotEmpty() && previousSize > 0) {
             // 只有在非首次加载且列表大小未减少时才滚动
             // 包括：新增文件、文件移动到顶部
-            reorderableState.listState.scrollToItem(0)
+            scope.launch {
+                reorderableState.listState.animateScrollToItem(0)
+            }
         }
         previousSize = files.size
     }

@@ -174,6 +174,7 @@ class ContentActivity : ComponentActivity() {
             Toast.makeText(this, "播放内容为空", Toast.LENGTH_SHORT).show()
         }
     }
+
     private fun stopSpeaking() {
         speechManager?.stopSpeaking()
     }
@@ -366,7 +367,7 @@ fun ContentScreen(
             }
         }
 
-        if(retryCount >= maxProgressRetry) {
+        if (retryCount >= maxProgressRetry) {
             Log.w("ContentActivity", "获取阅读进度超时，已尝试 $maxProgressRetry 次")
         } else {
             Log.d("ContentActivity", "成功获取阅读进度：$lastReadingPage")
@@ -422,7 +423,7 @@ fun ContentScreen(
     LaunchedEffect(totalPages, lastReadingPage) {
         // 恢复上次阅读位置（如果有）
         if ((!hasRestoredLastReading) && totalPages > 0 && lastReadingPage != null) {
-            pagerState.scrollToPage(lastReadingPage!!)
+            pagerState.animateScrollToPage(lastReadingPage!!)
             hasRestoredLastReading = true
         }
     }
@@ -443,14 +444,19 @@ fun ContentScreen(
                         // 页面未加载完成，回退页码并等待重试
                         currentSpeakingPage--  // 回退，下次循环重新检查这一页
                         retryCount++
-                        Log.w("ContentActivity", "⚠ 页面 $currentSpeakingPage 未加载完成，等待重试 ($retryCount/$maxRetryCount)")
+                        Log.w(
+                            "ContentActivity",
+                            "⚠ 页面 $currentSpeakingPage 未加载完成，等待重试 ($retryCount/$maxRetryCount)"
+                        )
                         delay(20)
                     }
+
                     nextPageContent.content.isNotBlank() -> {
                         // 找到有效页面
                         foundValidPage = true
                         Log.d("ContentActivity", "✓ 找到下一个有效页面：$currentSpeakingPage")
                     }
+
                     else -> {
                         // 页面是空白页，跳过
                         retryCount = 0  // 重置重试计数
@@ -465,7 +471,7 @@ fun ContentScreen(
 
                 // 同步 Pager 状态，确保显示正确的页面
                 if (currentSpeakingPage != pagerState.currentPage) {
-                    pagerState.scrollToPage(currentSpeakingPage)
+                    pagerState.animateScrollToPage(currentSpeakingPage)
                 }
             } else {
                 Log.d("ContentActivity", "已到达最后一个有效页面")
@@ -476,7 +482,7 @@ fun ContentScreen(
     LaunchedEffect(isSpeaking) {
         if (isSpeaking) {
             if (currentSpeakingPage != pagerState.currentPage) {
-                pagerState.scrollToPage(currentSpeakingPage)
+                pagerState.animateScrollToPage(currentSpeakingPage)
             }
         } else {
             // 这样会导致自动播放时跳转错误
@@ -654,11 +660,13 @@ fun ContentScreen(
                                 isHightLight.value = currentMatch
                             } else {
                                 // SearchResults 中没有记录，需要实时检查 BooksCache 中的页面内容
-                                val pagesCache = com.example.readear.data.BooksCache.getCache(uri.toString())
+                                val pagesCache =
+                                    com.example.readear.data.BooksCache.getCache(uri.toString())
                                 if (pagesCache != null) {
                                     val pageContent = pagesCache.getPage(page)
                                     if (pageContent != null) {
-                                        val containsText = pageContent.content.contains(query, ignoreCase = true)
+                                        val containsText =
+                                            pageContent.content.contains(query, ignoreCase = true)
                                         isHightLight.value = containsText
 
                                         // 同时更新 SearchResults，避免下次重复检查
@@ -1107,6 +1115,7 @@ fun DraggablePlayButton(
         }
     }
 }
+
 
 @Composable
 fun DraggableSearchWindow(
