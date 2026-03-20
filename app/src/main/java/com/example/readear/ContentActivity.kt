@@ -483,7 +483,7 @@ fun ContentScreen(
         if (isSpeaking) {
             if (currentSpeakingPage != pagerState.currentPage) {
                 pagerState.scrollToPage(currentSpeakingPage)
-                Toast.makeText(context, "已跳转到当前播放页面", Toast.LENGTH_SHORT).show()
+                //Toast.makeText(context, "已跳转到当前播放页面", Toast.LENGTH_SHORT).show()
             }
         } else {
             // 这样会导致自动播放时跳转错误
