@@ -781,12 +781,22 @@ fun ContentScreen(
                         },
                         onStop = { onStopSpeaking() },
                         onShake = {
-                            Log.d("DraggablePlayButton", "检测到按钮晃动，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}")
+                            Log.d(
+                                "DraggablePlayButton",
+                                "检测到按钮晃动，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}"
+                            )
                             if (isSpeaking && currentSpeakingPage != pagerState.currentPage) {
                                 lifecycleScope.launch {
-                                    Log.d("DraggablePlayButton", "按钮晃动后跳转到当前播放页面：${pagerState.currentPage} -> $currentSpeakingPage")
+                                    Log.d(
+                                        "DraggablePlayButton",
+                                        "按钮晃动后跳转到当前播放页面：${pagerState.currentPage} -> $currentSpeakingPage"
+                                    )
                                     pagerState.scrollToPage(currentSpeakingPage)
-                                    Toast.makeText(context, "已跳转到当前播放页面", Toast.LENGTH_SHORT)
+                                    Toast.makeText(
+                                        context,
+                                        "已跳转到当前播放页面",
+                                        Toast.LENGTH_SHORT
+                                    )
                                         .show()
                                 }
                             }
@@ -1097,16 +1107,13 @@ fun DraggablePlayButton(
     // 在 DraggablePlayButton 中添加缓存状态
     var shakeCheckResult by remember { mutableStateOf(false) }
     var lastShakeCheckTime by remember { mutableStateOf(0L) }
-
+    val lifecycleScope = rememberCoroutineScope()
     // 检测到摇晃后，设置 isOnShake 为 true，并在 1 秒后重置为 false，避免连续触发
-    LaunchedEffect(isShaking){
-        if(isShaking){
-            try {
+    LaunchedEffect(isShaking) {
+        if (isShaking) {
+            lifecycleScope.launch {
                 delay(1000)
-            } finally {
-                // 确保一定会执行，即使协程被取消
                 isShaking = false
-                Log.d("DraggablePlayButton", "摇晃状态已重置，isShaking: $isShaking")
             }
         }
     }
@@ -1133,18 +1140,20 @@ fun DraggablePlayButton(
                                 dragAmount.x.toInt(),
                                 dragAmount.y.toInt()
                             )
+                            // 只有在正在播放时才更新拖动记录和检测摇晃，避免在非播放状态下频繁计算
+                            if(isSpeaking) {
+                                updateDragQueue(dragQueue, offset, System.currentTimeMillis())
 
-                            updateDragQueue(dragQueue, offset, System.currentTimeMillis())
+                                val currentTime = System.currentTimeMillis()
+                                if (currentTime - lastShakeCheckTime > 50) { // 每 50ms 检查一次
+                                    shakeCheckResult = checkIfShake(dragQueue)
+                                    lastShakeCheckTime = currentTime
+                                }
 
-                            val currentTime = System.currentTimeMillis()
-                            if (currentTime - lastShakeCheckTime > 50) { // 每 50ms 检查一次
-                                shakeCheckResult = checkIfShake(dragQueue)
-                                lastShakeCheckTime = currentTime
-                            }
-
-                            if (!isShaking && shakeCheckResult) {
-                                isShaking = true
-                                onShake()
+                                if (!isShaking && shakeCheckResult) {
+                                    isShaking = true
+                                    onShake()
+                                }
                             }
                         }
                     )
@@ -1172,6 +1181,7 @@ data class OffsetTimestamp(
     val dx: Float = 0f, // 当前段的 dx
     val dy: Float = 0f // 当前段的 dy
 )
+
 /**
  * 更新拖动记录队列，保留最近 800ms 内的记录，并限制队列大小
  *
@@ -1201,7 +1211,7 @@ fun updateDragQueue(
         val timeDiffSec = timeDiffMs / 1000f
         val dx = (last.offset.x - prev.offset.x).toFloat()
         val dy = (last.offset.y - prev.offset.y).toFloat()
-        val distance = sqrt(dx*dx + dy*dy)
+        val distance = sqrt(dx * dx + dy * dy)
 
         val speed = distance / timeDiffSec
 
@@ -1244,7 +1254,7 @@ fun checkIfShake(
     queue: ArrayDeque<OffsetTimestamp>,
     totalDistanceThreshold: Float = 500f,
     startToEndDistanceThreshold: Float = 300f,
-    accelerationThreshold: Float = 120*1000f,
+    accelerationThreshold: Float = 120 * 1000f,
     directionChangesThreshold: Int = 2
 ): Boolean {
     if (queue.size < 3) return false
@@ -1277,7 +1287,8 @@ fun checkIfShake(
     val dx = (last.offset.x - first.offset.x).toFloat()
     val dy = (last.offset.y - first.offset.y).toFloat()
     val startToEndDistance = sqrt(dx * dx + dy * dy)  // 使用直接相乘替代 pow(2)
-    val isShakeGesture = directionChanges >= directionChangesThreshold && startToEndDistance <= startToEndDistanceThreshold
+    val isShakeGesture =
+        directionChanges >= directionChangesThreshold && startToEndDistance <= startToEndDistanceThreshold
 
     // 打印调试信息
     //Log.d("DraggablePlayButton", "总路径长度: $totalDistance, 峰值加速度: $peakAcceleration, 方向反转次数: $directionChanges, 起点到终点距离: $startToEndDistance, isShakeGesture: $isShakeGesture")
@@ -1391,7 +1402,10 @@ fun DraggableSearchWindow(
                             isSearching = true
                             lifecycleScope.launch {
                                 // 直接使用最新的 currentPage，不依赖 currentSearchPage
-                                Log.d("DraggableSearchWindow", "开始搜索上一页，当前页码：$currentPage")
+                                Log.d(
+                                    "DraggableSearchWindow",
+                                    "开始搜索上一页，当前页码：$currentPage"
+                                )
                                 searchPrevious(
                                     uri,
                                     searchQuery,
@@ -1424,7 +1438,10 @@ fun DraggableSearchWindow(
                             isSearching = true
                             lifecycleScope.launch {
                                 // 直接使用最新的 currentPage，不依赖 currentSearchPage
-                                Log.d("DraggableSearchWindow", "开始搜索下一页，当前页码：$currentPage")
+                                Log.d(
+                                    "DraggableSearchWindow",
+                                    "开始搜索下一页，当前页码：$currentPage"
+                                )
                                 searchNext(
                                     uri,
                                     searchQuery,
@@ -1521,7 +1538,10 @@ private suspend fun searchNext(
 
                 // 7. 如果 SearchResults 中为 null，需要从 BooksCache 中搜索
                 else -> {
-                    Log.d("DraggableSearchWindow", "SearchResults 中未找到结果，开始从 BooksCache 中搜索")
+                    Log.d(
+                        "DraggableSearchWindow",
+                        "SearchResults 中未找到结果，开始从 BooksCache 中搜索"
+                    )
                     val pageContent = pagesCache.getPage(searchPage)
                     if (pageContent != null) {
                         // 在页面内容中搜索文本
@@ -1539,7 +1559,10 @@ private suspend fun searchNext(
 
                         if (containsText) {
                             // 找到匹配页面
-                            Log.d("DraggableSearchWindow", "✓ BooksCache 中找到匹配页面：$searchPage")
+                            Log.d(
+                                "DraggableSearchWindow",
+                                "✓ BooksCache 中找到匹配页面：$searchPage"
+                            )
                             onPageFound(searchPage, true)
                             return
                         } else {
@@ -1649,7 +1672,10 @@ private suspend fun searchPrevious(
 
                         if (containsText) {
                             // 找到匹配页面
-                            Log.d("DraggableSearchWindow", "✓ BooksCache 中找到匹配页面：$searchPage")
+                            Log.d(
+                                "DraggableSearchWindow",
+                                "✓ BooksCache 中找到匹配页面：$searchPage"
+                            )
                             onPageFound(searchPage, true)
                             return
                         } else {
