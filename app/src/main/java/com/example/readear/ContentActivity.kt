@@ -52,6 +52,7 @@ import com.example.readear.parser.DefaultTextToSpeech
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.readear.data.SearchResults
 import kotlin.math.sqrt
+import kotlin.math.abs
 
 class ContentActivity : ComponentActivity() {
 
@@ -784,6 +785,8 @@ fun ContentScreen(
                                 lifecycleScope.launch {
                                     Log.d("DraggablePlayButton", "按钮晃动后跳转到当前播放页面：${pagerState.currentPage} -> $currentSpeakingPage")
                                     pagerState.scrollToPage(currentSpeakingPage)
+                                    Toast.makeText(context, "已跳转到当前播放页面", Toast.LENGTH_SHORT)
+                                        .show()
                                 }
                             }
                         }
@@ -1088,7 +1091,7 @@ fun DraggablePlayButton(
 ) {
     var offset by remember { mutableStateOf(IntOffset.Zero) }
 
-    val dragState = remember { DragState () }
+    val dragQueue = remember { ArrayDeque<OffsetTimestamp>() }
     var isShaking by remember { mutableStateOf(false) }
     // 在 DraggablePlayButton 中添加缓存状态
     var shakeCheckResult by remember { mutableStateOf(false) }
@@ -1130,11 +1133,11 @@ fun DraggablePlayButton(
                                 dragAmount.y.toInt()
                             )
 
-                            updateDragQueue(dragState, offset, System.currentTimeMillis())
+                            updateDragQueue(dragQueue, offset, System.currentTimeMillis())
 
                             val currentTime = System.currentTimeMillis()
                             if (currentTime - lastShakeCheckTime > 50) { // 每 50ms 检查一次
-                                shakeCheckResult = checkIfShake(dragState)
+                                shakeCheckResult = checkIfShake(dragQueue)
                                 lastShakeCheckTime = currentTime
                             }
 
@@ -1168,24 +1171,17 @@ data class OffsetTimestamp(
     val dx: Float = 0f, // 当前段的 dx
     val dy: Float = 0f // 当前段的 dy
 )
-
-data class DragState(
-    var dragQueue: ArrayDeque<OffsetTimestamp> = ArrayDeque(),
-    var totalDistance: Float = 0f, // 总距离
-    var peakAcceleration: Float = 0f, // 峰值加速度
-    var directionChanges: Int = 0, // 方向反转次数
-)
 /**
  * 更新拖动记录队列，保留最近 800ms 内的记录，并限制队列大小
  *
- * @param state 当前的拖动记录
+ * @param queue 当前的拖动记录队列
  * @param newOffset 新的拖动偏移和时间戳
  * @param timeIntervalMs 最小时间间隔，单位毫秒（默认 16ms）
  * @param expiryTimeMs 记录过期时间，单位毫秒（默认 800ms）
  * @param maxQueueSize 队列最大大小，超过后删除最旧记录（默认 50）
  */
 fun updateDragQueue(
-    state: DragState = DragState(),
+    queue: ArrayDeque<OffsetTimestamp>,
     newOffset: IntOffset,
     currentTime: Long,
     timeIntervalMs: Long = 16,
@@ -1236,7 +1232,7 @@ fun updateDragQueue(
 /**
  * 检查拖动记录队列是否符合摇晃手势的特征
  *
- * @param state 拖动记录，包含偏移、时间戳、速度、加速度等信息
+ * @param queue 拖动记录队列，包含偏移、时间戳、速度、加速度等信息
  * @param totalDistanceThreshold 总路径长度阈值，单位像素（默认 500px）
  * @param startToEndDistanceThreshold 起点到终点距离阈值，单位像素（默认 300px）
  * @param accelerationThreshold 峰值加速度阈值，单位像素/秒²（默认 120*1000px/s²）
@@ -1244,7 +1240,7 @@ fun updateDragQueue(
  * @return 是否检测到摇晃手势
  */
 fun checkIfShake(
-    state: DragState = DragState(),
+    queue: ArrayDeque<OffsetTimestamp>,
     totalDistanceThreshold: Float = 500f,
     startToEndDistanceThreshold: Float = 300f,
     accelerationThreshold: Float = 120*1000f,
@@ -1262,7 +1258,7 @@ fun checkIfShake(
     if (totalDistance < totalDistanceThreshold) return false
 
     // 检查峰值加速度
-    val peakAcceleration = queue.maxOfOrNull { it.acceleration } ?: 0f
+    val peakAcceleration = queue.maxOfOrNull { abs(it.acceleration) } ?: 0f
     //Log.d("DraggablePlayButton", "计算峰值加速度: $peakAcceleration")
     if (peakAcceleration < accelerationThreshold) return false
 
@@ -1394,7 +1390,7 @@ fun DraggableSearchWindow(
                             isSearching = true
                             lifecycleScope.launch {
                                 // 直接使用最新的 currentPage，不依赖 currentSearchPage
-                                Log.d("ContentActivity", "开始搜索上一页，当前页码：$currentPage")
+                                Log.d("DraggableSearchWindow", "开始搜索上一页，当前页码：$currentPage")
                                 searchPrevious(
                                     uri,
                                     searchQuery,
@@ -1427,7 +1423,7 @@ fun DraggableSearchWindow(
                             isSearching = true
                             lifecycleScope.launch {
                                 // 直接使用最新的 currentPage，不依赖 currentSearchPage
-                                Log.d("ContentActivity", "开始搜索下一页，当前页码：$currentPage")
+                                Log.d("DraggableSearchWindow", "开始搜索下一页，当前页码：$currentPage")
                                 searchNext(
                                     uri,
                                     searchQuery,
@@ -1476,25 +1472,25 @@ private suspend fun searchNext(
         // 1. 获取 BooksCache 中的缓存
         val pagesCache = com.example.readear.data.BooksCache.getCache(uri)
         if (pagesCache == null) {
-            Log.w("ContentActivity", "未找到页面缓存：$uri")
+            Log.w("DraggableSearchWindow", "未找到页面缓存：$uri")
             onPageFound(-1, true)
             return
         }
 
         val totalPageCount = pagesCache.totalPages
         if (totalPageCount == 0) {
-            Log.w("ContentActivity", "页面总数为 0")
+            Log.w("DraggableSearchWindow", "页面总数为 0")
             onPageFound(-1, true)
             return
         }
 
         // 2. 从下一页开始搜索（不包含当前页）
         var searchPage = currentPage + 1
-        Log.d("ContentActivity", "开始搜索下一页，起始页码：$searchPage，总页数：$totalPageCount")
+        Log.d("DraggableSearchWindow", "开始搜索下一页，起始页码：$searchPage，总页数：$totalPageCount")
 
         // 3. 如果已经是最后一页，提示用户
         if (searchPage >= totalPageCount) {
-            Log.d("ContentActivity", "⚠ 已经是最后一页，无法继续向后搜索")
+            Log.d("DraggableSearchWindow", "⚠ 已经是最后一页，无法继续向后搜索")
             onPageFound(-1, true)
             return
         }
@@ -1512,19 +1508,19 @@ private suspend fun searchNext(
                 hasMatchInCache != null -> {
                     if (hasMatchInCache) {
                         // 找到匹配页面
-                        Log.d("ContentActivity", "✓ SearchResults 中找到匹配页面：$searchPage")
+                        Log.d("DraggableSearchWindow", "✓ SearchResults 中找到匹配页面：$searchPage")
                         onPageFound(searchPage, true)
                         return
                     } else {
                         // 该页不匹配，继续搜索下一页
-                        //Log.d("ContentActivity", "✗ SearchResults 显示页面 $searchPage 不匹配")
+                        //Log.d("DraggableSearchWindow", "✗ SearchResults 显示页面 $searchPage 不匹配")
                         searchPage++
                     }
                 }
 
                 // 7. 如果 SearchResults 中为 null，需要从 BooksCache 中搜索
                 else -> {
-                    Log.d("ContentActivity", "SearchResults 中未找到结果，开始从 BooksCache 中搜索")
+                    Log.d("DraggableSearchWindow", "SearchResults 中未找到结果，开始从 BooksCache 中搜索")
                     val pageContent = pagesCache.getPage(searchPage)
                     if (pageContent != null) {
                         // 在页面内容中搜索文本
@@ -1542,17 +1538,17 @@ private suspend fun searchNext(
 
                         if (containsText) {
                             // 找到匹配页面
-                            Log.d("ContentActivity", "✓ BooksCache 中找到匹配页面：$searchPage")
+                            Log.d("DraggableSearchWindow", "✓ BooksCache 中找到匹配页面：$searchPage")
                             onPageFound(searchPage, true)
                             return
                         } else {
                             // 该页不匹配，继续搜索下一页
-                            //Log.d("ContentActivity", "✗ BooksCache 中页面 $searchPage 不匹配")
+                            //Log.d("DraggableSearchWindow", "✗ BooksCache 中页面 $searchPage 不匹配")
                             searchPage++
                         }
                     } else {
                         // 页面内容为空，跳过
-                        Log.w("ContentActivity", "⚠ 页面 $searchPage 内容为空")
+                        Log.w("DraggableSearchWindow", "⚠ 页面 $searchPage 内容为空")
                         searchPage++
                     }
                 }
@@ -1560,11 +1556,11 @@ private suspend fun searchNext(
         }
 
         // 8. 搜索完所有页面都没有找到
-        Log.d("ContentActivity", "⚠ 已搜索到最后一页，未找到匹配内容")
+        Log.d("DraggableSearchWindow", "⚠ 已搜索到最后一页，未找到匹配内容")
         onPageFound(-1, true)
 
     } catch (e: Exception) {
-        Log.e("ContentActivity", "搜索失败：${e.message}", e)
+        Log.e("DraggableSearchWindow", "搜索失败：${e.message}", e)
         onPageFound(-1, true)
     }
 }
@@ -1588,24 +1584,24 @@ private suspend fun searchPrevious(
         // 1. 获取 BooksCache 中的缓存
         val pagesCache = com.example.readear.data.BooksCache.getCache(uri)
         if (pagesCache == null) {
-            Log.w("ContentActivity", "未找到页面缓存：$uri")
+            Log.w("DraggableSearchWindow", "未找到页面缓存：$uri")
             onPageFound(-1, true)
             return
         }
 
         val totalPageCount = pagesCache.totalPages
         if (totalPageCount == 0) {
-            Log.w("ContentActivity", "页面总数为 0")
+            Log.w("DraggableSearchWindow", "页面总数为 0")
             onPageFound(-1, true)
             return
         }
 
         // 2. 从当前页的前一页开始搜索
         var searchPage = currentPage - 1
-        Log.d("ContentActivity", "开始搜索上一页，起始页码：$searchPage，总页数：$totalPageCount")
+        Log.d("DraggableSearchWindow", "开始搜索上一页，起始页码：$searchPage，总页数：$totalPageCount")
         // 3. 如果已经在第一页，提示用户
         if (searchPage < 0) {
-            Log.d("ContentActivity", "⚠ 已经是第一页，无法继续向上搜索")
+            Log.d("DraggableSearchWindow", "⚠ 已经是第一页，无法继续向上搜索")
             onPageFound(-1, true)
             return
         }
@@ -1623,12 +1619,12 @@ private suspend fun searchPrevious(
                 hasMatchInCache != null -> {
                     if (hasMatchInCache) {
                         // 找到匹配页面
-                        Log.d("ContentActivity", "✓ SearchResults 中找到匹配页面：$searchPage")
+                        Log.d("DraggableSearchWindow", "✓ SearchResults 中找到匹配页面：$searchPage")
                         onPageFound(searchPage, true)
                         return
                     } else {
                         // 该页不匹配，继续搜索上一页
-                        //Log.d("ContentActivity", "✗ SearchResults 显示页面 $searchPage 不匹配")
+                        //Log.d("DraggableSearchWindow", "✗ SearchResults 显示页面 $searchPage 不匹配")
                         searchPage--
                     }
                 }
@@ -1652,17 +1648,17 @@ private suspend fun searchPrevious(
 
                         if (containsText) {
                             // 找到匹配页面
-                            Log.d("ContentActivity", "✓ BooksCache 中找到匹配页面：$searchPage")
+                            Log.d("DraggableSearchWindow", "✓ BooksCache 中找到匹配页面：$searchPage")
                             onPageFound(searchPage, true)
                             return
                         } else {
                             // 该页不匹配，继续搜索上一页
-                            Log.d("ContentActivity", "✗ BooksCache 中页面 $searchPage 不匹配")
+                            Log.d("DraggableSearchWindow", "✗ BooksCache 中页面 $searchPage 不匹配")
                             searchPage--
                         }
                     } else {
                         // 页面内容为空，跳过
-                        Log.w("ContentActivity", "⚠ 页面 $searchPage 内容为空")
+                        Log.w("DraggableSearchWindow", "⚠ 页面 $searchPage 内容为空")
                         searchPage--
                     }
                 }
@@ -1670,11 +1666,11 @@ private suspend fun searchPrevious(
         }
 
         // 8. 搜索完所有页面都没有找到
-        Log.d("ContentActivity", "⚠ 已搜索到第一页，未找到匹配内容")
+        Log.d("DraggableSearchWindow", "⚠ 已搜索到第一页，未找到匹配内容")
         onPageFound(-1, true)
 
     } catch (e: Exception) {
-        Log.e("ContentActivity", "搜索失败：${e.message}", e)
+        Log.e("DraggableSearchWindow", "搜索失败：${e.message}", e)
         onPageFound(-1, true)
     }
 }
@@ -1717,5 +1713,5 @@ private fun updateSearchResults(
     // 保存回 SearchResults
     com.example.readear.data.SearchResults.setSearchResult(uri, searchText, updatedResults)
 
-    Log.d("ContentActivity", "更新 SearchResults: 页面 $pageNumber = $contains")
+    Log.d("DraggableSearchWindow", "更新 SearchResults: 页面 $pageNumber = $contains")
 }
