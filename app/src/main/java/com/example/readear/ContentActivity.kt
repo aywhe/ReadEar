@@ -298,7 +298,6 @@ fun ContentScreen(
     val context = LocalContext.current
     val density = LocalDensity.current
     val lifecycleScope = rememberCoroutineScope()
-    val currentIsSpeaking by rememberUpdatedState(isSpeaking)
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var totalPages by remember { mutableIntStateOf(0) }
@@ -763,7 +762,7 @@ fun ContentScreen(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(16.dp),
-                        isSpeaking = currentIsSpeaking,
+                        isSpeaking = isSpeaking,
                         onClick = {
                             lifecycleScope.launch {
                                 val currentPageContent =
@@ -780,8 +779,9 @@ fun ContentScreen(
                         },
                         onStop = { onStopSpeaking() },
                         onShake = {
+                            // 这里 isSpeaking一直是false，找不到原因
                             Log.d("DraggablePlayButton", "检测到摇晃，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}")
-                            if (currentIsSpeaking && currentSpeakingPage != pagerState.currentPage) {
+                            if (isSpeaking && currentSpeakingPage != pagerState.currentPage) {
                                 lifecycleScope.launch {
                                     pagerState.animateScrollToPage(currentSpeakingPage)
                                     Log.d("DraggablePlayButton", "摇晃后跳转到当前播放页面：$currentSpeakingPage")
