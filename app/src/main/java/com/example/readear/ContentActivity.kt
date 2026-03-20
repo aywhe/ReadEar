@@ -50,8 +50,8 @@ import com.example.readear.parser.TextChunk
 import com.example.readear.parser.TextManager
 import com.example.readear.parser.DefaultTextToSpeech
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.example.readear.data.BooksCache
 import com.example.readear.data.SearchResults
+import kotlin.math.sqrt
 
 class ContentActivity : ComponentActivity() {
 
@@ -298,6 +298,7 @@ fun ContentScreen(
     val context = LocalContext.current
     val density = LocalDensity.current
     val lifecycleScope = rememberCoroutineScope()
+    val currentIsSpeaking by rememberUpdatedState(isSpeaking)
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var totalPages by remember { mutableIntStateOf(0) }
@@ -334,7 +335,6 @@ fun ContentScreen(
 
     // TextManager 实例（使用 remember 避免重复创建）
     val textManager = remember(context) { TextManager(context.applicationContext) }
-
 
     // 启动初始化：同步内存数据并恢复上次阅读位置
     LaunchedEffect(uri, fileType) {
@@ -763,7 +763,7 @@ fun ContentScreen(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(16.dp),
-                        isSpeaking = isSpeaking,
+                        isSpeaking = currentIsSpeaking,
                         onClick = {
                             lifecycleScope.launch {
                                 val currentPageContent =
@@ -778,7 +778,16 @@ fun ContentScreen(
                                 }
                             }
                         },
-                        onStop = { onStopSpeaking() }
+                        onStop = { onStopSpeaking() },
+                        onShake = {
+                            Log.d("DraggablePlayButton", "检测到摇晃，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}")
+                            if (currentIsSpeaking && currentSpeakingPage != pagerState.currentPage) {
+                                lifecycleScope.launch {
+                                    pagerState.animateScrollToPage(currentSpeakingPage)
+                                    Log.d("DraggablePlayButton", "摇晃后跳转到当前播放页面：$currentSpeakingPage")
+                                }
+                            }
+                        }
                     )
                 }
 
@@ -1075,9 +1084,26 @@ fun DraggablePlayButton(
     modifier: Modifier = Modifier,
     isSpeaking: Boolean = false,
     onClick: () -> Unit = {},
-    onStop: () -> Unit = {}
+    onStop: () -> Unit = {},
+    onShake: () -> Unit = {}
 ) {
     var offset by remember { mutableStateOf(IntOffset.Zero) }
+
+    val dragQueue = remember { ArrayDeque<OffsetTimestamp>() }
+    var isShaking by remember { mutableStateOf(false) }
+
+    // 检测到摇晃后，设置 isOnShake 为 true，并在 1 秒后重置为 false，避免连续触发
+    LaunchedEffect(isShaking){
+        if(isShaking){
+            try {
+                delay(1000)
+            } finally {
+                // 确保一定会执行，即使协程被取消
+                isShaking = false
+                Log.d("DraggablePlayButton", "摇晃状态已重置，isShaking: $isShaking")
+            }
+        }
+    }
 
     Box(modifier = modifier) {
         FloatingActionButton(
@@ -1094,13 +1120,19 @@ fun DraggablePlayButton(
                 .offset { offset }
                 .pointerInput(Unit) {
                     detectDragGestures(
-                        onDragStart = { },
+                        onDragStart = {},
                         onDrag = { change, dragAmount ->
                             change.consume()
                             offset += IntOffset(
                                 dragAmount.x.toInt(),
                                 dragAmount.y.toInt()
                             )
+                            updateDragQueue(dragQueue, offset, System.currentTimeMillis())
+                            if(!isShaking && checkIfShake(dragQueue)){
+                                Log.d("DraggablePlayButton", "检测到摇晃，触发 onShake()")
+                                isShaking = true
+                                onShake()
+                            }
                         }
                     )
                 }
@@ -1116,7 +1148,140 @@ fun DraggablePlayButton(
     }
 }
 
+data class OffsetTimestamp(
+    val offset: IntOffset,
+    val timestamp: Long,
+    // 可以添加其他相关信息，例如速度、方向等
+    val speed: Float = 0f, // 速度
+    val acceleration: Float = 0f, // 加速度
+    val segmentDistance: Float = 0f, // 分段距离
+    val dotProduct: Float = 0f,// 方向向量的点积
+    val dx: Float = 0f, // 当前段的 dx
+    val dy: Float = 0f // 当前段的 dy
+)
+/**
+ * 更新拖动记录队列，保留最近 800ms 内的记录，并限制队列大小
+ *
+ * @param queue 当前的拖动记录队列
+ * @param newOffset 新的拖动偏移和时间戳
+ * @param timeIntervalMs 最小时间间隔，单位毫秒（默认 16ms）
+ * @param expiryTimeMs 记录过期时间，单位毫秒（默认 800ms）
+ * @param maxQueueSize 队列最大大小，超过后删除最旧记录（默认 50）
+ */
+fun updateDragQueue(
+    queue: ArrayDeque<OffsetTimestamp>,
+    newOffset: IntOffset,
+    currentTime: Long,
+    timeIntervalMs: Long = 16,
+    expiryTimeMs: Long = 800,
+    maxQueueSize: Int = 50
+) {
+    if (queue.lastOrNull()?.timestamp?.let { currentTime - it < timeIntervalMs } == true) {
+        return
+    }
+    queue.addLast(OffsetTimestamp(newOffset, currentTime))
+    val last = queue.last()
+    val prev = queue.getOrNull(queue.size - 2)
 
+    if (prev != null) {
+        val timeDiffMs = (last.timestamp - prev.timestamp).coerceAtLeast(1)
+        val timeDiffSec = timeDiffMs / 1000f
+        val dx = (last.offset.x - prev.offset.x).toFloat()
+        val dy = (last.offset.y - prev.offset.y).toFloat()
+        val distance = sqrt(dx*dx + dy*dy)
+
+        val speed = distance / timeDiffSec
+
+        val prevSpeed = prev.speed
+
+        val acceleration = (speed - prevSpeed) / timeDiffSec
+
+        val dotProduct = dx * prev.dx + dy * prev.dy
+
+
+        queue[queue.size - 1] = last.copy(
+            speed = speed,
+            acceleration = acceleration,
+            segmentDistance = distance,
+            dotProduct = dotProduct,
+            dx = dx,
+            dy = dy
+        )
+    }
+
+    while (queue.isNotEmpty() && currentTime - queue.first().timestamp > expiryTimeMs) {
+        queue.removeFirst()
+    }
+    while (queue.size > maxQueueSize) {
+        queue.removeFirst()
+    }
+}
+
+/**
+ * 检查拖动记录队列是否符合摇晃手势的特征
+ *
+ * @param queue 拖动记录队列，包含偏移、时间戳、速度、加速度等信息
+ * @param totalDistanceThreshold 总路径长度阈值，单位像素（默认 500px）
+ * @param startToEndDistanceThreshold 起点到终点距离阈值，单位像素（默认 300px）
+ * @param accelerationThreshold 峰值加速度阈值，单位像素/秒²（默认 150*1000px/s²）
+ * @param directionChangesThreshold 方向反转次数阈值（默认 2次）
+ * @return 是否检测到摇晃手势
+ */
+fun checkIfShake(
+    queue: ArrayDeque<OffsetTimestamp>,
+    totalDistanceThreshold: Float = 500f,
+    startToEndDistanceThreshold: Float = 300f,
+    accelerationThreshold: Float = 150*1000f,
+    directionChangesThreshold: Int = 2
+): Boolean {
+    if (queue.size < 3) return false
+
+    // 计算总路径长度
+    var totalDistance = 0f
+    for (i in 2 until queue.size) {
+        totalDistance += queue[i].segmentDistance
+    }
+
+    //Log.d("DraggablePlayButton", "计算总路径长度: $totalDistance")
+    if (totalDistance < totalDistanceThreshold) return false
+
+    // 检查峰值加速度
+    val peakAcceleration = queue.maxOfOrNull { it.acceleration } ?: 0f
+    //Log.d("DraggablePlayButton", "计算峰值加速度: $peakAcceleration")
+    if (peakAcceleration < accelerationThreshold) return false
+
+    // 计算方向反转次数
+    var directionChanges = 0
+    for (i in 2 until queue.size) {
+        if (queue[i].dotProduct < 0) {
+            directionChanges++
+        }
+    }
+
+    // 来回晃动：方向频繁反转，且起点终点接近
+    val first = queue.first()
+    val last = queue.last()
+    val dx = (last.offset.x - first.offset.x).toFloat()
+    val dy = (last.offset.y - first.offset.y).toFloat()
+    val startToEndDistance = sqrt(dx * dx + dy * dy)  // 使用直接相乘替代 pow(2)
+    val isShakeGesture = directionChanges >= directionChangesThreshold && startToEndDistance <= startToEndDistanceThreshold
+
+    // 打印调试信息
+    //Log.d("DraggablePlayButton", "总路径长度: $totalDistance, 峰值加速度: $peakAcceleration, 方向反转次数: $directionChanges, 起点到终点距离: $startToEndDistance, isShakeGesture: $isShakeGesture")
+    return isShakeGesture
+}
+
+/**
+ * 可拖动的搜索窗口组件
+ *
+ * @param onDismiss 关闭窗口的回调
+ * @param onNavigateToPage 导航到指定页面的回调，参数为目标页码
+ * @param currentPage 当前页码，用于显示和搜索逻辑
+ * @param textManager TextManager 实例，用于执行搜索操作
+ * @param uri 当前书籍的 URI，用于搜索上下文
+ * @param query 当前搜索查询文本
+ * @param onQueryChanged 搜索查询文本变化的回调，参数为新的查询文本
+ */
 @Composable
 fun DraggableSearchWindow(
     onDismiss: () -> Unit,
