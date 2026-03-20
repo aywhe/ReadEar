@@ -422,7 +422,7 @@ fun ContentScreen(
     LaunchedEffect(totalPages, lastReadingPage) {
         // 恢复上次阅读位置（如果有）
         if ((!hasRestoredLastReading) && totalPages > 0 && lastReadingPage != null) {
-            pagerState.animateScrollToPage(lastReadingPage!!)
+            pagerState.scrollToPage(lastReadingPage!!)
             hasRestoredLastReading = true
         }
     }
@@ -470,7 +470,7 @@ fun ContentScreen(
 
                 // 同步 Pager 状态，确保显示正确的页面
                 if (currentSpeakingPage != pagerState.currentPage) {
-                    pagerState.animateScrollToPage(currentSpeakingPage)
+                    pagerState.scrollToPage(currentSpeakingPage)
                 }
             } else {
                 Log.d("ContentActivity", "已到达最后一个有效页面")
@@ -481,7 +481,7 @@ fun ContentScreen(
     LaunchedEffect(isSpeaking) {
         if (isSpeaking) {
             if (currentSpeakingPage != pagerState.currentPage) {
-                pagerState.animateScrollToPage(currentSpeakingPage)
+                pagerState.scrollToPage(currentSpeakingPage)
             }
         } else {
             // 这样会导致自动播放时跳转错误
@@ -783,7 +783,7 @@ fun ContentScreen(
                             Log.d("DraggablePlayButton", "检测到摇晃，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}")
                             if (isSpeaking && currentSpeakingPage != pagerState.currentPage) {
                                 lifecycleScope.launch {
-                                    pagerState.animateScrollToPage(currentSpeakingPage)
+                                    pagerState.scrollToPage(currentSpeakingPage)
                                     Log.d("DraggablePlayButton", "摇晃后跳转到当前播放页面：$currentSpeakingPage")
                                 }
                             }
