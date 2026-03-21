@@ -548,7 +548,7 @@ fun FileListScreen(
             && !isMovingFile
         ) {
             scope.launch {
-                Log.d("MainActivity", "Top files changed, animating scroll to top.")
+                Log.d("MainActivity", "last item changed, scrolling to last item: ${files.last().fileUri}")
                 lazyListState.scrollToItem(files.size - 1)
             }
         }
@@ -630,10 +630,10 @@ fun FileListScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                     ) { isDragging ->
-                        Log.d(
+                        /*Log.d(
                             "MainActivity",
                             "Rendering file: ${file.fileUri}"
-                        )
+                        )*/
                         // 使用 animateFloatAsState 实现平滑的缩放动画
                         val animatedScale by animateFloatAsState(
                             targetValue = if (isDragging) 1.05f else 1f,
