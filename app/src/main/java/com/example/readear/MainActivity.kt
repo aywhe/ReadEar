@@ -20,7 +20,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
@@ -35,6 +39,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
@@ -46,8 +53,10 @@ import com.example.readear.parser.TextManager
 import com.example.readear.repository.FileRepository
 import com.example.readear.ui.theme.ReadEarTheme
 import kotlinx.coroutines.launch
-import org.burnoutcrew.reorderable.*
+//import org.burnoutcrew.reorderable.*
+import sh.calvin.reorderable.*
 import androidx.core.net.toUri
+import kotlinx.coroutines.NonCancellable.key
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "file_list")
 
@@ -130,17 +139,14 @@ class MainActivity : ComponentActivity() {
                             },
                             onMoveFile = { from, to ->
                                 if (from != to) {
-                                    // 数据层交换
-                                    val newList = fileList.toMutableList()
-                                    val item = newList.removeAt(from)
-                                    newList.add(to, item)
-                                    fileList = newList
+                                    fileList = fileList.toMutableList().apply{
+                                        add(to,removeAt(from))
+                                    }
                                 }
                             },
-                            onMoveFileEnd = { from, to ->
-                                if (from != to) {
-                                    fileRepository.saveFileList(fileList)
-                                }
+                            onMoveFileEnd = {from, to ->
+                                // 在此回调中执行最终的保存
+                                fileRepository.saveFileList(fileList)
                             }
                         )
                         DraggableFloatingButton(
@@ -528,23 +534,7 @@ fun FileListScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current as MainActivity
     var isMovingFile by remember { mutableStateOf(false) }
-    // 1. 创建重排序状态
-    val reorderableState = rememberReorderableLazyListState(
-        onMove = { from, to ->
-            isMovingFile = true
-            Log.d("MainActivity", "Moving item in FileListItem from ${from.index} to ${to.index}")
-            onMoveFile(from.index, to.index)
-        },
-        onDragEnd = { startIndex, endIndex ->
-            Log.d(
-                "MainActivity",
-                "Moved item in FileListItem from ${startIndex} to ${endIndex}"
-            ) // 添加日志
-            onMoveFileEnd(startIndex, endIndex)
-            isMovingFile = false
-        },
-        canDragOver = { _, _ -> true }
-    )
+    val lazyListState = rememberLazyListState()
 
     LaunchedEffect(files.lastOrNull()?.fileUri) {
         if (files.isNotEmpty()
@@ -552,11 +542,10 @@ fun FileListScreen(
         ) {
             scope.launch {
                 Log.d("MainActivity", "Top files changed, animating scroll to top.")
-                reorderableState.listState.scrollToItem(files.size - 1)
+                lazyListState.scrollToItem(files.size - 1)
             }
         }
     }
-
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("文件列表 (${files.size})") },
@@ -608,46 +597,38 @@ fun FileListScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        LazyColumn(
-            reverseLayout = true,
-            state = reorderableState.listState, // 绑定重排序状态
-            modifier = Modifier
-                .fillMaxSize()
-                .reorderable(reorderableState) // 关键：启用重排序功能
-                .detectReorderAfterLongPress(reorderableState),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (files.isEmpty()) {
-                item {
-                    Text(
-                        text = "暂无文件，点击浮动按钮 + 号添加文件",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
-            } else {
-                items(
-                    count = files.size,
-                    key = { index -> files[index].fileUri } // 必须唯一 Key
-                ) { index ->
-                    val file = files[index]
+        if (files.isEmpty()) {
+            Box {
+                Text(
+                    text = "暂无文件，点击浮动按钮 + 号添加文件",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+        } else {
+            ReorderableColumn(
+                list = files,
+                onSettle = { from, to ->
+                    onMoveFile(from, to)
+                    onMoveFileEnd(from, to)
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) { index, file, isDragging ->
                     Log.d(
                         "MainActivity",
                         "Rendering file: ${file.fileUri} at index: $index"
                     ) // 添加日志
-                    // 3. 使用 ReorderableItem 包裹你的列表项
-                    ReorderableItem(
-                        reorderableState = reorderableState,
-                        key = file.fileUri,
-                    ) { isDragging ->
-                        // 使用 animateFloatAsState 实现平滑的缩放动画
-                        val animatedScale by animateFloatAsState(
-                            targetValue = if (isDragging) 1.05f else 1f,
-                            label = "scale"
-                        )
-
+                    // 使用 animateFloatAsState 实现平滑的缩放动画
+                    val animatedScale by animateFloatAsState(
+                        targetValue = if (isDragging) 1.05f else 1f,
+                        label = "scale"
+                    )
+                    ReorderableItem() {
                         FileListItem(
                             file = file,
                             isDragging = isDragging,
@@ -667,7 +648,7 @@ fun FileListScreen(
                         )
                     }
                 }
-            }
+
         }
     }
 

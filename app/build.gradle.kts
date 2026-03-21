@@ -85,7 +85,8 @@ dependencies {
     // LocalBroadcastManager
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
 
-    implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
+    //implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
+    implementation("sh.calvin.reorderable:reorderable:3.0.0")
 
     // Apache POI for Word documents
     implementation("org.apache.poi:poi:5.2.5")
