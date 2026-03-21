@@ -139,14 +139,10 @@ class MainActivity : ComponentActivity() {
                             },
                             onMoveFile = { from, to ->
                                 if (from != to) {
-                                    fileList = fileList.toMutableList().apply{
-                                        add(to,removeAt(from))
+                                    fileList = fileList.toMutableList().apply {
+                                        add(to, removeAt(from))
                                     }
                                 }
-                            },
-                            onMoveFileEnd = {from, to ->
-                                // 在此回调中执行最终的保存
-                                fileRepository.saveFileList(fileList)
                             }
                         )
                         DraggableFloatingButton(
@@ -438,10 +434,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        fileRepository.saveFileList(fileList)
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        fileRepository.saveFileList(fileList)
         // 清理定时器
         stopTimer()
     }
@@ -524,8 +522,7 @@ fun FileListScreen(
     files: List<FileItem>,
     onDeleteFile: (FileItem) -> Unit = {},
     onFileClick: (FileItem) -> Unit = {},
-    onMoveFile: (Int, Int) -> Unit = { _, _ -> },
-    onMoveFileEnd: (Int, Int) -> Unit = { _, _ -> }
+    onMoveFile: (Int, Int) -> Unit = { _, _ -> }
 ) {
     val scope = rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
@@ -535,6 +532,16 @@ fun FileListScreen(
     val context = LocalContext.current as MainActivity
     var isMovingFile by remember { mutableStateOf(false) }
     val lazyListState = rememberLazyListState()
+
+    // 创建reorderable状态，使用detectReorder而不是detectReorderAfterLongPress
+    val reorderableState = rememberReorderableLazyListState(
+        lazyListState = lazyListState,
+        onMove = { from, to ->
+            isMovingFile = true
+            Log.d("MainActivity", "Moving item from ${from.index} to ${to.index}")
+            onMoveFile(from.index, to.index)
+        }
+    )
 
     LaunchedEffect(files.lastOrNull()?.fileUri) {
         if (files.isNotEmpty()
@@ -607,28 +614,32 @@ fun FileListScreen(
                 )
             }
         } else {
-            ReorderableColumn(
-                list = files,
-                onSettle = { from, to ->
-                    onMoveFile(from, to)
-                    onMoveFileEnd(from, to)
-                },
+            LazyColumn(
+                reverseLayout = true,
+                state = lazyListState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) { index, file, isDragging ->
-                    Log.d(
-                        "MainActivity",
-                        "Rendering file: ${file.fileUri} at index: $index"
-                    ) // 添加日志
-                    // 使用 animateFloatAsState 实现平滑的缩放动画
-                    val animatedScale by animateFloatAsState(
-                        targetValue = if (isDragging) 1.05f else 1f,
-                        label = "scale"
-                    )
-                    ReorderableItem() {
+            ) {
+                items(files.size, key = { index -> files[index].fileUri }) { index ->
+                    val file = files[index]
+                    ReorderableItem(
+                        state = reorderableState,
+                        key = file.fileUri,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                    ) { isDragging ->
+                        Log.d(
+                            "MainActivity",
+                            "Rendering file: ${file.fileUri}"
+                        )
+                        // 使用 animateFloatAsState 实现平滑的缩放动画
+                        val animatedScale by animateFloatAsState(
+                            targetValue = if (isDragging) 1.05f else 1f,
+                            label = "scale"
+                        )
+
                         FileListItem(
                             file = file,
                             isDragging = isDragging,
@@ -643,12 +654,19 @@ fun FileListScreen(
                                 }
                             },
                             modifier = Modifier
-                                .zIndex(if (isDragging) 1f else 0f) // 确保拖拽项在最上层
+                                .animateItem()
+                                .zIndex(if (isDragging) 1f else 0f)
                                 .scale(animatedScale)
+                                .draggableHandle(
+                                    dragGestureDetector = DragGestureDetector.LongPress,
+                                    onDragStopped = {
+                                        isMovingFile = false
+                                    }
+                                )
                         )
                     }
                 }
-
+            }
         }
     }
 
