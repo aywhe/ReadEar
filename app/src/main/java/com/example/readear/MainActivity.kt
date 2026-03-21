@@ -175,10 +175,10 @@ class MainActivity : ComponentActivity() {
         fileList = if (existingIndex >= 0) {
             fileList.toMutableList().apply {
                 removeAt(existingIndex)
-                add(0, newFile)
+                add(newFile)  // 移动到末尾而不是开头
             }
         } else {
-            listOf(newFile) + fileList
+            fileList + newFile  // 添加到末尾而不是开头
         }
     }
 
@@ -546,19 +546,13 @@ fun FileListScreen(
         canDragOver = { _, _ -> true }
     )
 
-    // 2. 记录之前的列表大小
-    var previousSize by remember { mutableStateOf(0) }
-
-    // 3. 监听文件列表变化，智能判断是否需要滚动到顶部
-    LaunchedEffect(files.firstOrNull()?.fileUri) {
+    LaunchedEffect(files.lastOrNull()?.fileUri) {
         if (files.isNotEmpty()
             && !isMovingFile
         ) {
-            // 只有在非首次加载且列表大小未减少时才滚动
-            // 包括：新增文件、文件移动到顶部
             scope.launch {
                 Log.d("MainActivity", "Top files changed, animating scroll to top.")
-                reorderableState.listState.animateScrollToItem(0)
+                reorderableState.listState.scrollToItem(files.size - 1)
             }
         }
     }
@@ -615,6 +609,7 @@ fun FileListScreen(
         )
 
         LazyColumn(
+            reverseLayout = true,
             state = reorderableState.listState, // 绑定重排序状态
             modifier = Modifier
                 .fillMaxSize()
@@ -667,7 +662,6 @@ fun FileListScreen(
                                 }
                             },
                             modifier = Modifier
-                                .animateItem() // 添加动画
                                 .zIndex(if (isDragging) 1f else 0f) // 确保拖拽项在最上层
                                 .scale(animatedScale)
                         )
