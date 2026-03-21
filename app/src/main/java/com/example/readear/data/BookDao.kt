@@ -58,6 +58,9 @@ interface BookDao {
     
     @Query("DELETE FROM pages WHERE bookId = :bookId")
     suspend fun deletePages(bookId: String)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM pages WHERE bookId = :bookId)")
+    fun hasAnyPages(bookId: String): Boolean
     
     // ==================== Reading Progress ====================
     

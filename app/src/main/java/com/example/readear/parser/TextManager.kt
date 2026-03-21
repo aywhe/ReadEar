@@ -253,7 +253,7 @@ class TextManager(private val context: Context) {
                     totalWords += textChunk.content.length
                     
                     if (pageCount % 100 == 0 || textChunk.isCompleted) {
-                        saveBookInfo(uriString, totalWords, lastPageIndex + 1)
+                        cacheCoordinator.saveBookInfo(uriString, totalWords, lastPageIndex + 1)
                     }
                     
                     if (textChunk.isCompleted) {
@@ -268,36 +268,6 @@ class TextManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "提取文本失败：${e.message}", e)
             onLoadingStateChanged?.invoke(uriString, TextLoadingState.ERROR)
-        }
-    }
-    
-    private suspend fun saveBookInfo(uriString: String, totalWords: Int, totalPages: Int) {
-        try {
-            val cacheManager = CacheManager(context)
-            val existingBook = cacheManager.getBook(uriString)
-            
-            if (existingBook != null) {
-                cacheManager.saveBook(
-                    existingBook.copy(
-                        totalWords = totalWords,
-                        totalPages = totalPages,
-                        lastReadTime = System.currentTimeMillis()
-                    )
-                )
-            } else {
-                cacheManager.saveBook(
-                    Book(
-                        bookId = uriString,
-                        title = uriString.substringAfterLast("/"),
-                        filePath = uriString,
-                        totalWords = totalWords,
-                        totalPages = totalPages,
-                        lastReadTime = System.currentTimeMillis()
-                    )
-                )
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "保存书籍信息失败：${e.message}", e)
         }
     }
 }

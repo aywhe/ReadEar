@@ -250,4 +250,34 @@ class CacheCoordinator(
             newCache
         }
     }
+
+    suspend fun saveBookInfo(uri: String, totalWords: Int, totalPages: Int) {
+        withContext(Dispatchers.Default) {
+            try {
+                val existingBook = cacheManager.getBook(uri)
+                if (existingBook != null) {
+                    cacheManager.saveBook(
+                        existingBook.copy(
+                            totalWords = totalWords,
+                            totalPages = totalPages,
+                            lastReadTime = System.currentTimeMillis()
+                        )
+                    )
+                } else {
+                    cacheManager.saveBook(
+                        Book(
+                            bookId = uri,
+                            title = uri.substringAfterLast("/"),
+                            filePath = uri,
+                            totalWords = totalWords,
+                            totalPages = totalPages,
+                            lastReadTime = System.currentTimeMillis()
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("CacheCoordinator", "保存书籍信息失败：${e.message}", e)
+            }
+        }
+    }
 }

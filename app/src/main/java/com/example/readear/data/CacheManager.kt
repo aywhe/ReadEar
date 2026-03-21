@@ -126,8 +126,7 @@ class CacheManager(private val context: Context) {
      * @return 如果有缓存返回 true
      */
     suspend fun hasPagesCache(bookId: String): Boolean = withContext(Dispatchers.IO) {
-        val pages = dao.getAllPages(bookId)
-        pages.isNotEmpty()
+        dao.hasAnyPages(bookId)
     }
     
     /**
