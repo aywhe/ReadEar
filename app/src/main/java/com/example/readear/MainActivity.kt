@@ -73,13 +73,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private val fileBrowserLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uriList: List<Uri>? ->
+        uriList?.forEach { uri ->
             // 立即获取持久 URI 权限
             try {
                 contentResolver.takePersistableUriPermission(
-                    it,
+                    uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             } catch (e: Exception) {
@@ -87,20 +87,20 @@ class MainActivity : ComponentActivity() {
                 e.printStackTrace()
             }
 
-            val fileInfo = getFileInfoFromUri(it)
+            val fileInfo = getFileInfoFromUri(uri)
             //Toast.makeText(this, "选择了文件：${fileInfo.fileName}", Toast.LENGTH_SHORT).show()
 
             val newFileItem = FileItem(
                 fileName = fileInfo.fileName,
                 fileType = getFileTypeFromName(fileInfo.fileName),
-                fileUri = it.toString(),
+                fileUri = uri.toString(),
                 fileSize = fileInfo.fileSize
             )
 
             addFileToList(newFileItem)
-            // 异步保存，不阻塞 UI
-            FileRepository(applicationContext).saveFileList(fileList)
         }
+        // 异步保存，不阻塞 UI
+        FileRepository(applicationContext).saveFileList(fileList)
     }
 
     private var fileList by mutableStateOf<List<FileItem>>(emptyList())
