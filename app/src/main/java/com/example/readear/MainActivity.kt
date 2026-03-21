@@ -6,7 +6,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.provider.OpenableColumns
-import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -17,17 +16,14 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.*
@@ -50,8 +46,6 @@ import com.example.readear.parser.TextManager
 import com.example.readear.repository.FileRepository
 import com.example.readear.ui.theme.ReadEarTheme
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import org.burnoutcrew.reorderable.*
 import androidx.core.net.toUri
 
@@ -102,7 +96,7 @@ class MainActivity : ComponentActivity() {
 
     private var fileList by mutableStateOf<List<FileItem>>(emptyList())
     private lateinit var fileRepository: FileRepository
-    
+
     // 新增：用于控制拖拽状态
     private var isDragging by mutableStateOf(false)
 
@@ -135,13 +129,18 @@ class MainActivity : ComponentActivity() {
                                 openContentActivity(file)
                             },
                             onMoveFile = { from, to ->
-                                // 数据层交换
-                                val newList = fileList.toMutableList()
-                                val item = newList.removeAt(from)
-                                newList.add(to, item)
-                                fileList = newList
-                                // 保存
-                                fileRepository.saveFileList(fileList)
+                                if (from != to) {
+                                    // 数据层交换
+                                    val newList = fileList.toMutableList()
+                                    val item = newList.removeAt(from)
+                                    newList.add(to, item)
+                                    fileList = newList
+                                }
+                            },
+                            onMoveFileEnd = { from, to ->
+                                if (from != to) {
+                                    fileRepository.saveFileList(fileList)
+                                }
                             }
                         )
                         DraggableFloatingButton(
@@ -431,6 +430,10 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    override fun onPause() {
+        super.onPause()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         // 清理定时器
@@ -462,7 +465,7 @@ fun SettingsDialog(
                 ) {
                     Text("设置 TTS")
                 }
-                
+
                 Text(
                     text = "点击“设置 TTS”可跳转到系统文字转语音设置页面，选择您喜欢的 TTS 引擎（如讯飞、百度等）。",
                     style = MaterialTheme.typography.bodySmall,
@@ -515,7 +518,8 @@ fun FileListScreen(
     files: List<FileItem>,
     onDeleteFile: (FileItem) -> Unit = {},
     onFileClick: (FileItem) -> Unit = {},
-    onMoveFile: (Int, Int) -> Unit = {_,_->}
+    onMoveFile: (Int, Int) -> Unit = { _, _ -> },
+    onMoveFileEnd: (Int, Int) -> Unit = { _, _ -> }
 ) {
     val scope = rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
@@ -523,26 +527,40 @@ fun FileListScreen(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current as MainActivity
+    var isMovingFile by remember { mutableStateOf(false) }
     // 1. 创建重排序状态
-    // onMove: 当用户拖动完成或过程中需要交换数据时调用
-    val reorderableState = rememberReorderableLazyListState(onMove = { from, to ->
-        Log.d("MainActivity", "Moving FileListItem from ${from.index} to ${to.index}") // 添加日志
-        onMoveFile(from.index, to.index)
-    }, canDragOver = { _, _ -> true })
-    
+    val reorderableState = rememberReorderableLazyListState(
+        onMove = { from, to ->
+            isMovingFile = true
+            Log.d("MainActivity", "Moving item in FileListItem from ${from.index} to ${to.index}")
+            onMoveFile(from.index, to.index)
+        },
+        onDragEnd = { startIndex, endIndex ->
+            Log.d(
+                "MainActivity",
+                "Moved item in FileListItem from ${startIndex} to ${endIndex}"
+            ) // 添加日志
+            onMoveFileEnd(startIndex, endIndex)
+            isMovingFile = false
+        },
+        canDragOver = { _, _ -> true }
+    )
+
     // 2. 记录之前的列表大小
     var previousSize by remember { mutableStateOf(0) }
-    
+
     // 3. 监听文件列表变化，智能判断是否需要滚动到顶部
-    LaunchedEffect(files.size, files.firstOrNull()?.fileUri) {
-        if (files.isNotEmpty() && previousSize > 0) {
+    LaunchedEffect(files.firstOrNull()?.fileUri) {
+        if (files.isNotEmpty()
+            && !isMovingFile
+        ) {
             // 只有在非首次加载且列表大小未减少时才滚动
             // 包括：新增文件、文件移动到顶部
             scope.launch {
+                Log.d("MainActivity", "Top files changed, animating scroll to top.")
                 reorderableState.listState.animateScrollToItem(0)
             }
         }
-        previousSize = files.size
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -601,8 +619,7 @@ fun FileListScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .reorderable(reorderableState) // 关键：启用重排序功能
-                .detectReorderAfterLongPress(reorderableState)
-            ,
+                .detectReorderAfterLongPress(reorderableState),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -616,12 +633,15 @@ fun FileListScreen(
                     )
                 }
             } else {
-	        items(
+                items(
                     count = files.size,
                     key = { index -> files[index].fileUri } // 必须唯一 Key
                 ) { index ->
                     val file = files[index]
-                    Log.d("MainActivity", "Rendering file: ${file.fileUri} at index: $index") // 添加日志
+                    Log.d(
+                        "MainActivity",
+                        "Rendering file: ${file.fileUri} at index: $index"
+                    ) // 添加日志
                     // 3. 使用 ReorderableItem 包裹你的列表项
                     ReorderableItem(
                         reorderableState = reorderableState,
@@ -632,7 +652,7 @@ fun FileListScreen(
                             targetValue = if (isDragging) 1.05f else 1f,
                             label = "scale"
                         )
-                        
+
                         FileListItem(
                             file = file,
                             isDragging = isDragging,
@@ -642,7 +662,7 @@ fun FileListScreen(
                                 }
                             },
                             onClick = {
-                                if(!isDragging) {
+                                if (!isDragging) {
                                     onFileClick(file)
                                 }
                             },
@@ -735,7 +755,7 @@ fun FileListItem(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showDeleteButton by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    
+
     LaunchedEffect(isDragging) {
         if (isDragging) {
             showDeleteButton = true
@@ -748,8 +768,7 @@ fun FileListItem(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-        ,
+            .padding(vertical = 4.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         onClick = onClick
     ) {
@@ -785,9 +804,11 @@ fun FileListItem(
                 visible = showDeleteButton,
                 enter = fadeIn(),
                 exit = fadeOut()
-            ){
-            // 根据 showDeleteButton 状态控制删除按钮显示
-                IconButton(modifier = Modifier.animateEnterExit(),onClick = { showDeleteDialog = true }) {
+            ) {
+                // 根据 showDeleteButton 状态控制删除按钮显示
+                IconButton(
+                    modifier = Modifier.animateEnterExit(),
+                    onClick = { showDeleteDialog = true }) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "删除",
