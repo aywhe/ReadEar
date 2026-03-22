@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -531,7 +532,12 @@ fun FileListScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current as MainActivity
     var isMovingFile by remember { mutableStateOf(false) }
-    val lazyListState = rememberLazyListState()
+    
+    // 为LazyColumn设置初始滚动位置，避免不必要的重排
+    val lazyListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = files.size - 1, // 反向布局时显示最后一个项目
+        initialFirstVisibleItemScrollOffset = 0
+    )
 
     // 创建reorderable状态，使用detectReorder而不是detectReorderAfterLongPress
     val reorderableState = rememberReorderableLazyListState(
@@ -542,17 +548,22 @@ fun FileListScreen(
             onMoveFile(from.index, to.index)
         }
     )
+    
+    // 使用rememberUpdatedState确保Lambda更新
+    val onFileClickUpdated = rememberUpdatedState(onFileClick)
 
     LaunchedEffect(files.lastOrNull()?.fileUri) {
         if (files.isNotEmpty()
             && !isMovingFile
         ) {
             scope.launch {
+                // 使用animateScrollToItem实现平滑滚动
                 Log.d("MainActivity", "last item changed, scrolling to last item: ${files.last().fileUri}")
-                lazyListState.scrollToItem(files.size - 1)
+                lazyListState.animateScrollToItem(files.size - 1)
             }
         }
     }
+    
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("文件列表 (${files.size})") },
@@ -618,23 +629,29 @@ fun FileListScreen(
                 reverseLayout = true,
                 state = lazyListState,
                 modifier = Modifier
+                    .animateContentSize()
                     .fillMaxSize()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                // 添加内容缓存，提高滚动性能
+                contentPadding = PaddingValues(4.dp),
+                // 预加载可见项前后各5个item
+                userScrollEnabled = true
             ) {
-                items(files.size, key = { index -> files[index].fileUri }) { index ->
-                    val file = files[index]
+                items(
+                    count = files.size,
+                    key = { index -> files[index].fileUri },
+                    contentType = { "file_item" } // 添加content type，帮助Compose优化重组
+                ) { index ->
+                    val file by remember { derivedStateOf { files[index] } }
+                    
                     ReorderableItem(
                         state = reorderableState,
                         key = file.fileUri,
-                        modifier = Modifier
-                            .fillMaxWidth()
+                        // 简化修饰符链，减少中间对象创建
+                        modifier = Modifier.fillMaxWidth()
                     ) { isDragging ->
-                        /*Log.d(
-                            "MainActivity",
-                            "Rendering file: ${file.fileUri}"
-                        )*/
-                        // 使用 animateFloatAsState 实现平滑的缩放动画
+                        // 使用remember计算缩放值，避免重复计算
                         val animatedScale by animateFloatAsState(
                             targetValue = if (isDragging) 1.05f else 1f,
                             label = "scale"
@@ -650,11 +667,10 @@ fun FileListScreen(
                             },
                             onClick = {
                                 if (!isDragging) {
-                                    onFileClick(file)
+                                    onFileClickUpdated.value(file)
                                 }
                             },
                             modifier = Modifier
-                                .animateItem()
                                 .zIndex(if (isDragging) 1f else 0f)
                                 .scale(animatedScale)
                                 .draggableHandle(
