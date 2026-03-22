@@ -79,17 +79,23 @@ private class TextPaginator(
     suspend fun processLine(line: String) {
         val linesNeeded = calculateLinesNeeded(line)
         
-        if (linesNeeded > maxLinesPerPage) {
-            handleExtraLongLine(line)
-        } else if (currentLines + linesNeeded >= maxLinesPerPage && currentContent.isNotEmpty()) {
-            flushCurrentPage()
-            addLineToNewPage(line)
-        } else {
-            if (linesNeeded > 1 && currentLines + linesNeeded > maxLinesPerPage) {
-                splitLineAcrossPages(line)
-            } else {
-                appendLineToCurrentPage(line)
+        when {
+            // 超长行处理：单行内容超过一页容量
+            linesNeeded > maxLinesPerPage -> handleExtraLongLine(line)
+            
+            // 当前行+新行会超出页面容量，且当前有内容
+            currentLines + linesNeeded >= maxLinesPerPage && currentContent.isNotEmpty() -> {
+                flushCurrentPage()
+                addLineToNewPage(line)
             }
+            
+            // 新行跨页（需要拆分到两页）
+            linesNeeded > 1 && currentLines + linesNeeded > maxLinesPerPage -> {
+                splitLineAcrossPages(line)
+            }
+            
+            // 正常情况：直接添加到当前页面
+            else -> appendLineToCurrentPage(line)
         }
     }
     
@@ -118,21 +124,30 @@ private class TextPaginator(
             flushCurrentPage()
         }
         
-        var remainingText = line
-        while (remainingText.length > avgCharsPerLine * maxLinesPerPage) {
-            val pageText = remainingText.substring(0, avgCharsPerLine * maxLinesPerPage)
+        val chunkSize = avgCharsPerLine * maxLinesPerPage
+        val lineLength = line.length
+        var startIndex = 0
+        
+        // 处理完整的页块
+        while (startIndex + chunkSize <= lineLength) {
+            val endIndex = startIndex + chunkSize
+            val pageTextBuilder = StringBuilder(chunkSize + 1)
+            pageTextBuilder.append(line, startIndex, endIndex).append('\n')
+            
             emitCallback(
                 TextChunk(
-                    content = pageText + "\n",
+                    content = pageTextBuilder.toString(),
                     isCompleted = false,
                     index = getCurrentIndex()
                 )
             )
             incrementIndex()
-            remainingText = remainingText.substring(avgCharsPerLine * maxLinesPerPage)
+            startIndex = endIndex
         }
         
-        if (remainingText.isNotEmpty()) {
+        // 处理剩余部分（如果还有未处理的字符）
+        if (startIndex < lineLength) {
+            val remainingText = line.substring(startIndex)
             appendLineToCurrentPage(remainingText)
         }
     }
@@ -158,20 +173,30 @@ private class TextPaginator(
         if (linesNeeded <= maxLinesPerPage) {
             appendLineToCurrentPage(line)
         } else {
-            var remainingText = line
-            while (remainingText.length > avgCharsPerLine * maxLinesPerPage) {
-                val pageText = remainingText.substring(0, avgCharsPerLine * maxLinesPerPage)
+            val chunkSize = avgCharsPerLine * maxLinesPerPage
+            val lineLength = line.length
+            var startIndex = 0
+            
+            // 处理完整的页块
+            while (startIndex + chunkSize <= lineLength) {
+                val endIndex = startIndex + chunkSize
+                val pageTextBuilder = StringBuilder(chunkSize + 1)
+                pageTextBuilder.append(line, startIndex, endIndex).append('\n')
+                
                 emitCallback(
                     TextChunk(
-                        content = pageText + "\n",
+                        content = pageTextBuilder.toString(),
                         isCompleted = false,
                         index = getCurrentIndex()
                     )
                 )
                 incrementIndex()
-                remainingText = remainingText.substring(avgCharsPerLine * maxLinesPerPage)
+                startIndex = endIndex
             }
-            if (remainingText.isNotEmpty()) {
+            
+            // 处理剩余部分
+            if (startIndex < lineLength) {
+                val remainingText = line.substring(startIndex)
                 appendLineToCurrentPage(remainingText)
             }
         }
@@ -188,21 +213,31 @@ private class TextPaginator(
         if (remainingText.isNotEmpty()) {
             val remainingLinesNeeded = calculateLinesNeeded(remainingText)
             if (remainingLinesNeeded > maxLinesPerPage) {
-                var textToSplit = remainingText
-                while (textToSplit.length > avgCharsPerLine * maxLinesPerPage) {
-                    val pageText = textToSplit.substring(0, avgCharsPerLine * maxLinesPerPage)
+                val chunkSize = avgCharsPerLine * maxLinesPerPage
+                val textLength = remainingText.length
+                var startIndex = 0
+                
+                // 处理完整的页块
+                while (startIndex + chunkSize <= textLength) {
+                    val endIndex = startIndex + chunkSize
+                    val pageTextBuilder = StringBuilder(chunkSize + 1)
+                    pageTextBuilder.append(remainingText, startIndex, endIndex).append('\n')
+                    
                     emitCallback(
                         TextChunk(
-                            content = pageText + "\n",
+                            content = pageTextBuilder.toString(),
                             isCompleted = false,
                             index = getCurrentIndex()
                         )
                     )
                     incrementIndex()
-                    textToSplit = textToSplit.substring(avgCharsPerLine * maxLinesPerPage)
+                    startIndex = endIndex
                 }
-                if (textToSplit.isNotEmpty()) {
-                    appendLineToCurrentPage(textToSplit)
+                
+                // 处理剩余部分
+                if (startIndex < textLength) {
+                    val finalText = remainingText.substring(startIndex)
+                    appendLineToCurrentPage(finalText)
                 }
             } else {
                 appendLineToCurrentPage(remainingText)
@@ -211,7 +246,7 @@ private class TextPaginator(
     }
     
     private fun appendLineToCurrentPage(line: String) {
-        currentContent.append(line).append("\n")
+        currentContent.append(line).append('\n')
         currentLines += calculateLinesNeeded(line)
     }
     
