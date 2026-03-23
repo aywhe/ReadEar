@@ -18,13 +18,9 @@ import kotlinx.coroutines.withContext
  * @param booksCache 内存缓存管理器
  */
 class CacheCoordinator(
-    private val context: Context,
-    private val booksCache: BooksCache
+    private val booksCache: BooksCache,
+    private val cacheManager: CacheManager
 ) {
-    
-    private val cacheManager: CacheManager by lazy {
-        CacheManager(context)
-    }
     
     /**
      * 检查书籍是否有缓存（任意一级）
