@@ -32,8 +32,9 @@ class ReadEarApplication : Application() {
         // 在后台异步初始化 TTS，避免阻塞主线程
         applicationScope.launch {
             try {
+                Log.d("ReadEarApplication", "TTS 初始化中...")
                 userTextToSpeech = UserTextToSpeech(context, TTSEngineType.DEFAULT)
-                userTextToSpeech?.reinitialize()
+                Log.d("ReadEarApplication", "TTS 初始化完成")
             } catch (e: Exception) {
                 // TTS 初始化失败不影响应用启动，记录日志即可
                 Log.e("ReadEarApplication", "TTS 初始化失败：${e.message}", e)
@@ -44,6 +45,7 @@ class ReadEarApplication : Application() {
     override fun onTerminate() {
         super.onTerminate()
         // 清理 TTS 资源
+        userTextToSpeech?.stopSpeaking()
         userTextToSpeech?.release()
         // 注意：BooksCache 会在进程终止时自动释放，无需手动清理
         booksCache.clearAllCache()

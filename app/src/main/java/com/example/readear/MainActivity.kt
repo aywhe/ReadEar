@@ -115,6 +115,9 @@ class MainActivity : ComponentActivity() {
 
         fileRepository = FileRepository(applicationContext)
 
+        // 异步恢复数据
+        restoreFileList()
+
         setContent {
             ReadEarTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -149,9 +152,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-
-        // 异步恢复数据
-        restoreFileList()
     }
 
     private fun openSystemFilePicker() {
@@ -765,31 +765,32 @@ fun FileListItem(
     val context = LocalContext.current
     val cacheManager = remember { CacheManager(context) }
 
-    // 使用 State 来存储异步加载的数据
-    var lastReadingPageNumber by remember { mutableStateOf<Int?>(null) }
-    var totalPages by remember { mutableStateOf(0) }
-    
-    // 在 LaunchedEffect 中异步加载数据
-    LaunchedEffect(file.fileUri) {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            lastReadingPageNumber = cacheManager.loadReadingProgress(file.fileUri)
-            totalPages = cacheManager.getTotalPagesCount(file.fileUri)
-        }
-    }
-    
-    // 计算阅读进度百分比和颜色
-    val progressInfo = remember(lastReadingPageNumber, totalPages) {
-        if (totalPages > 0 && lastReadingPageNumber != null) {
-            val percentage = ((lastReadingPageNumber!! + 1).toFloat() / totalPages * 100).toInt()
-            val color = when {
-                lastReadingPageNumber!! >= totalPages - 1 -> Color.Gray  // 最后一页，绿色
-                else -> Color.Black  // 其他情况，蓝色
-            }
-            Pair(percentage, color)
-        } else {
-            null
-        }
-    }
+    // 它自动更新不好弄，百分比的实现也似乎可有可无，所以还是算了
+//    // 使用 State 来存储异步加载的数据
+//    var lastReadingPageNumber by remember { mutableStateOf<Int?>(null) }
+//    var totalPages by remember { mutableStateOf(0) }
+//
+//    // 在 LaunchedEffect 中异步加载数据
+//    LaunchedEffect(file.fileUri) {
+//        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+//            lastReadingPageNumber = cacheManager.loadReadingProgress(file.fileUri)
+//            totalPages = cacheManager.getTotalPagesCount(file.fileUri)
+//        }
+//    }
+//
+//    // 计算阅读进度百分比和颜色
+//    val progressInfo = remember(lastReadingPageNumber, totalPages) {
+//        if (totalPages > 0 && lastReadingPageNumber != null) {
+//            val percentage = ((lastReadingPageNumber!! + 1).toFloat() / totalPages * 100).toInt()
+//            val color = when {
+//                lastReadingPageNumber!! >= totalPages - 1 -> Color.Gray  // 最后一页，绿色
+//                else -> Color.Black  // 其他情况，蓝色
+//            }
+//            Pair(percentage, color)
+//        } else {
+//            null
+//        }
+//    }
 
 
     LaunchedEffect(isDragging) {
@@ -842,14 +843,14 @@ fun FileListItem(
                         )
                     }
                                 
-                    // 阅读进度百分比
-                    progressInfo?.let { (percentage, color) ->
-                        Text(
-                            text = "已读 $percentage%",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = color
-                        )
-                    }
+//                    // 阅读进度百分比
+//                    progressInfo?.let { (percentage, color) ->
+//                        Text(
+//                            text = "已读 $percentage%",
+//                            style = MaterialTheme.typography.bodySmall,
+//                            color = color
+//                        )
+//                    }
                 }
             }
             AnimatedVisibility(
