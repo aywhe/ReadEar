@@ -1,5 +1,6 @@
 package com.example.readear.parser
 
+import android.content.Context
 import android.net.Uri
 import com.example.readear.FileType
 import kotlinx.coroutines.flow.Flow
@@ -14,29 +15,26 @@ import kotlin.math.ceil
  * 职责：
  * - 从文件中提取原始文本
  * - 将文本流分页为适合显示的文本块
- * 
- * @param textExtractorFactory 文本提取器工厂
+ *
  */
 class TextLoader(
-    private val textExtractorFactory: TextExtractorFactory
+    private val context: Context
 ) {
-    
     /**
      * 提取文本并分页
      * 
      * @param uri 文件 URI
-     * @param fileType 文件类型
      * @param avgCharsPerLine 每行平均字符数
      * @param maxLinesPerPage 每页最大行数
      * @return 返回分页后的文本块 Flow
      */
     suspend fun extractAndPaginate(
         uri: Uri,
-        fileType: FileType,
         avgCharsPerLine: Int,
         maxLinesPerPage: Int
     ): Flow<TextChunk> = withContext(Dispatchers.IO) {
-        val extractor = textExtractorFactory.getExtractor(fileType)
+        val textExtractorFactory = TextExtractorFactory(context)
+        val extractor = textExtractorFactory.getExtractor(uri)
         val rawTextFlow = extractor.extractTextRaw(uri)
         paginateText(rawTextFlow, avgCharsPerLine, maxLinesPerPage)
     }
