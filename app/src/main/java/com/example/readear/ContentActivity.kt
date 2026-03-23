@@ -67,9 +67,12 @@ class ContentActivity : ComponentActivity() {
         const val EXTRA_FILE_TYPE = "extra_file_type"
     }
 
-    private val app = this.applicationContext as ReadEarApplication
-    // TTS 相关
-    private val userTextToSpeech = app.userTextToSpeech
+    // 使用懒加载，确保在 Activity 完全初始化后再获取 applicationContext
+    private val app by lazy { applicationContext as ReadEarApplication }
+    
+    // TTS 相关（使用懒加载）
+    private val userTextToSpeech by lazy { app.userTextToSpeech }
+    
     private var isSpeaking by mutableStateOf(false)
     private var isPlayDone by mutableStateOf(false)
     private var currentTextToSpeak = ""
@@ -78,9 +81,9 @@ class ContentActivity : ComponentActivity() {
     // 当前阅读页码
     private var currentPageNumber: Int = 0
 
-    private val cacheManager = CacheManager(this)
-    private val textManager = TextManager(this,
-        app.booksCache, cacheManager)
+    // 使用懒加载，避免在 onCreate 之前初始化
+    private val cacheManager by lazy { CacheManager(this) }
+    private val textManager by lazy { TextManager(this, app.booksCache, cacheManager) }
 
     // 定时器广播接收器
     private val timerStopReceiver = object : BroadcastReceiver() {
@@ -141,26 +144,26 @@ class ContentActivity : ComponentActivity() {
     private fun observeTTSState() {
         lifecycleScope.launch {
             launch {
-                userTextToSpeech.isSpeaking?.collect { speaking ->
+                userTextToSpeech?.isSpeaking?.collect { speaking ->
                     isSpeaking = speaking
                     Log.d("ContentActivity", "TTS 状态更新：isSpeaking=$speaking")
                 }
             }
             launch {
-                userTextToSpeech.isPlayDone?.collect { done ->
+                userTextToSpeech?.isPlayDone?.collect { done ->
                     isPlayDone = done
                     Log.d("ContentActivity", "TTS 状态更新：isPlayDone=$done")
                 }
             }
             launch {
-                userTextToSpeech.isTTSAvailable?.collect { available ->
+                userTextToSpeech?.isTTSAvailable?.collect { available ->
                     isTTSAvailable = available
                     Log.d("ContentActivity", "TTS 状态更新：isTTSAvailable=$available")
                 }
             }
         }
 
-        userTextToSpeech.onTTSError = { error ->
+        userTextToSpeech?.onTTSError = { error ->
             Log.e("ContentActivity", "TTS 错误：$error")
             showTTSSettingsDialog()
         }
@@ -172,7 +175,7 @@ class ContentActivity : ComponentActivity() {
             currentTextToSpeak = text
             Log.d("ContentActivity", "开始播放文本：${text.length} 字符")
 
-            val success = userTextToSpeech.playText(text)
+            val success = userTextToSpeech?.playText(text)
             if (success == null || !success) {
                 Log.w("ContentActivity", "播放失败，TTS 可能未就绪")
                 Toast.makeText(this, "TTS 未就绪，请稍后再试", Toast.LENGTH_SHORT).show()
@@ -184,7 +187,7 @@ class ContentActivity : ComponentActivity() {
     }
 
     private fun stopSpeaking() {
-        userTextToSpeech.stopSpeaking()
+        userTextToSpeech?.stopSpeaking()
     }
 
     /**
@@ -228,8 +231,7 @@ class ContentActivity : ComponentActivity() {
         saveReadingProgress()
         releasePersistedUriPermission()
 
-        userTextToSpeech.stopSpeaking()
-        userTextToSpeech.release()
+        userTextToSpeech?.stopSpeaking()
         isSpeaking = false
         isTTSAvailable = false
 
@@ -282,7 +284,7 @@ class ContentActivity : ComponentActivity() {
             .setTitle("TTS 引擎不可用")
             .setMessage("请安装或启用文本转语音引擎。\n\n路径：设置 > 辅助功能 > 文字转语音输出")
             .setPositiveButton("前往设置") { _, _ ->
-                userTextToSpeech.openTTSSettings()
+                userTextToSpeech?.openTTSSettings()
             }
             .setNegativeButton("取消", null)
             .show()

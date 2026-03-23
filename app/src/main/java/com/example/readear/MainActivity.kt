@@ -488,7 +488,7 @@ fun SettingsDialog(
  */
 private fun openTTSSettings(context: Context) {
     val app = context.applicationContext as ReadEarApplication
-    app.userTextToSpeech.openTTSSettings()
+    app.userTextToSpeech?.openTTSSettings()
 }
 
 data class FileItem(
@@ -522,9 +522,9 @@ fun FileListScreen(
     val context = LocalContext.current as MainActivity
     var isMovingFile by remember { mutableStateOf(false) }
     
-    // 为LazyColumn设置初始滚动位置，避免不必要的重排
+    // 为 LazyColumn 设置初始滚动位置，避免不必要的重排
     val lazyListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = files.size - 1, // 反向布局时显示最后一个项目
+        initialFirstVisibleItemIndex = if (files.isNotEmpty()) files.size - 1 else 0, // 反向布局时显示最后一个项目
         initialFirstVisibleItemScrollOffset = 0
     )
 

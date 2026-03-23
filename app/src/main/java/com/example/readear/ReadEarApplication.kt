@@ -13,19 +13,20 @@ import com.example.readear.parser.UserTextToSpeech
  */
 class ReadEarApplication : Application() {
     val booksCache = BooksCache()
-    val userTextToSpeech = UserTextToSpeech(this, TTSEngineType.DEFAULT)
+    var userTextToSpeech: UserTextToSpeech? = null
 
     override fun onCreate() {
         super.onCreate()
         // 预加载资源（可选）
-        // booksCache 会在首次访问时自动初始化
-        userTextToSpeech.reinitialize()
+        userTextToSpeech = UserTextToSpeech(this, TTSEngineType.DEFAULT)
+
+        userTextToSpeech?.reinitialize()
     }
     
     override fun onTerminate() {
         super.onTerminate()
         // 清理 TTS 资源
-        userTextToSpeech.release()
+        userTextToSpeech?.release()
         // 注意：BooksCache 会在进程终止时自动释放，无需手动清理
         booksCache.clearAllCache()
     }
