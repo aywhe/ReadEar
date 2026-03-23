@@ -94,11 +94,7 @@ class ContentActivity : ComponentActivity() {
         // 监听 TTS 状态变化
         observeTTSState()
 
-        // 延迟初始化 TTS，避免在 onCreate 中立即初始化导致失败
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-            delay(100) // 延迟 100ms 初始化
-            Log.d("ContentActivity", "TTS 已就绪")
-        }
+        // TTS 初始化已经在 Application 中异步完成，这里无需再次延迟
 
         setContent {
             ReadEarTheme {
@@ -317,7 +313,7 @@ fun ContentScreen(
     // 启动初始化：同步内存数据并恢复上次阅读位置
     LaunchedEffect(uri) {
         try {
-            // 1. 在后台启动协程执行 syncLoadPages，不阻塞当前协程
+            // 1. 在后台启动协程执行 startLoadPages，不阻塞当前协程
             launch(Dispatchers.IO) {
                 textManager.startLoadPages(
                     uri,
@@ -329,15 +325,18 @@ fun ContentScreen(
             errorMessage = "初始化失败：${e.message}"
             isInitializing = false
         }
-        // 1. 尝试获取阅读进度（设置超时，避免无限等待）
+        
+        // 2. 异步获取阅读进度（优化：减少重试次数，加快失败速度）
         var retryCount = 0
-        val maxProgressRetry = 50
+        val maxProgressRetry = 20  // 从 50 减少到 20，最多等待 200ms
         var hasLoadedProgress = false
+        
         while (lastReadingPage == null && retryCount < maxProgressRetry) {
             val progress = textManager.getLastReadPageNumber(uri.toString())
             if (progress != null) {
                 lastReadingPage = progress
                 hasLoadedProgress = true
+                Log.d("ContentActivity", "成功获取阅读进度：$lastReadingPage")
             } else {
                 delay(10)
                 retryCount++
@@ -346,14 +345,14 @@ fun ContentScreen(
 
         if (retryCount >= maxProgressRetry) {
             Log.w("ContentActivity", "获取阅读进度超时，已尝试 $maxProgressRetry 次")
-        } else {
-            Log.d("ContentActivity", "成功获取阅读进度：$lastReadingPage")
         }
-        // 2. 如果没有获取到进度，设置为 0（从第一页开始）
+        
+        // 3. 如果没有获取到进度，设置为 0（从第一页开始）
         if (!hasLoadedProgress) {
             Log.d("ContentActivity", "没有获取到进度，设置为 0")
             lastReadingPage = 0
         }
+        
         // 标记初始化完成
         isInitializing = false
     }
@@ -409,7 +408,7 @@ fun ContentScreen(
             var nextPageContent: TextChunk? = null
             var foundValidPage = false
             var retryCount = 0
-            val maxRetryCount = 10  // 最多等待 10 次（0.2 秒）
+            val maxRetryCount = 5  // 从 10 减少到 5，最多等待 100ms
 
             // 查找下一个非空白页，最多尝试到最后一页
             while (!foundValidPage && currentSpeakingPage < totalPages - 1 && retryCount < maxRetryCount) {
@@ -688,7 +687,7 @@ fun ContentScreen(
                         // 如果为 null，等待并重新尝试获取
                         LaunchedEffect(page) {
                             var retryCount = 0
-                            val maxRetryCount = 50
+                            val maxRetryCount = 30  // 从 50 减少到 30，最多等待 900ms
 
                             Log.d("ContentActivity", "开始加载页面 $page")
 

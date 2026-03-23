@@ -219,18 +219,7 @@ class MainActivity : ComponentActivity() {
             try {
                 val restoredList = fileRepository.loadFileList()
                 
-                // 批量请求 URI 权限，不阻塞 UI
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                    restoredList.forEach { fileItem ->
-                        try {
-                            requestUriPermission(fileItem.fileUri)
-                        } catch (e: Exception) {
-                            // 忽略单个文件的权限请求失败
-                        }
-                    }
-                }
-                
-                // 在主线程更新 UI
+                // 在主线程直接更新 UI，URI 权限改为惰性请求（点击时再请求）
                 with(kotlinx.coroutines.Dispatchers.Main) {
                     fileList = restoredList
                 }
@@ -302,6 +291,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openContentActivity(file: FileItem) {
+        // 在打开文件时才请求 URI 权限（惰性请求）
+        try {
+            requestUriPermission(file.fileUri)
+        } catch (e: Exception) {
+            // 权限请求失败不影响打开文件
+        }
+        
         val intent = Intent(this, ContentActivity::class.java).apply {
             putExtra(ContentActivity.EXTRA_FILE_URI, file.fileUri)
             putExtra(ContentActivity.EXTRA_FILE_NAME, file.fileName)
