@@ -40,9 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
@@ -50,14 +47,13 @@ import androidx.compose.ui.zIndex
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
-import com.example.readear.parser.TextManager
 import com.example.readear.repository.FileRepository
 import com.example.readear.ui.theme.ReadEarTheme
 import kotlinx.coroutines.launch
-//import org.burnoutcrew.reorderable.*
 import sh.calvin.reorderable.*
 import androidx.core.net.toUri
-import kotlinx.coroutines.NonCancellable.key
+import com.example.readear.data.BooksCache
+import com.example.readear.data.CacheManager
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "file_list")
 
@@ -101,14 +97,11 @@ class MainActivity : ComponentActivity() {
             addFileToList(newFileItem)
         }
         // 异步保存，不阻塞 UI
-        FileRepository(applicationContext).saveFileList(fileList)
+        fileRepository.saveFileList(fileList)
     }
 
     private var fileList by mutableStateOf<List<FileItem>>(emptyList())
     private lateinit var fileRepository: FileRepository
-
-    // 新增：用于控制拖拽状态
-    private var isDragging by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -193,10 +186,12 @@ class MainActivity : ComponentActivity() {
      * 清除书籍的内存缓存和数据库数据（后台异步执行）
      */
     private fun clearBookData(fileUri: String) {
+        val context = this
+        val app = context.applicationContext as ReadEarApplication
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
-                val textManager = TextManager(applicationContext)
-                textManager.delBook(fileUri)
+                app.booksCache.clearCache(fileUri)
+                CacheManager(context).deleteBook(fileUri)
                 releaseUriPermission(fileUri)
             } catch (e: Exception) {
                 e.printStackTrace()
