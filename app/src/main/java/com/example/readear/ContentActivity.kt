@@ -141,19 +141,19 @@ class ContentActivity : ComponentActivity() {
     private fun observeTTSState() {
         lifecycleScope.launch {
             launch {
-                userTextToSpeech.isSpeaking.collect { speaking ->
+                userTextToSpeech.isSpeaking?.collect { speaking ->
                     isSpeaking = speaking
                     Log.d("ContentActivity", "TTS 状态更新：isSpeaking=$speaking")
                 }
             }
             launch {
-                userTextToSpeech.isPlayDone.collect { done ->
+                userTextToSpeech.isPlayDone?.collect { done ->
                     isPlayDone = done
                     Log.d("ContentActivity", "TTS 状态更新：isPlayDone=$done")
                 }
             }
             launch {
-                userTextToSpeech.isTTSAvailable.collect { available ->
+                userTextToSpeech.isTTSAvailable?.collect { available ->
                     isTTSAvailable = available
                     Log.d("ContentActivity", "TTS 状态更新：isTTSAvailable=$available")
                 }
