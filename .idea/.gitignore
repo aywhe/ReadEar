@@ -4,3 +4,8 @@
 /runConfigurations.xml
 /gradle.xml
 /deploymentTargetSelector.xml
+/caches
+/libraries
+/modules.xml
+/navEditor.xml
+/assetWizardSettings.xml
