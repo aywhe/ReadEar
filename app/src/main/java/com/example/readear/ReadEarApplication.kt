@@ -1,9 +1,14 @@
 package com.example.readear
 
 import android.app.Application
+import android.util.Log
 import com.example.readear.data.BooksCache
 import com.example.readear.speech.TTSEngineType
 import com.example.readear.speech.UserTextToSpeech
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * 全局 Application 类
@@ -14,13 +19,23 @@ import com.example.readear.speech.UserTextToSpeech
 class ReadEarApplication : Application() {
     val booksCache = BooksCache()
     var userTextToSpeech: UserTextToSpeech? = null
+    
+    // 应用级别的 CoroutineScope，用于后台异步任务
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
-        // 预加载资源（可选）
-        userTextToSpeech = UserTextToSpeech(this, TTSEngineType.DEFAULT)
-
-        userTextToSpeech?.reinitialize()
+        val context = this
+        // 在后台异步初始化 TTS，避免阻塞主线程
+        applicationScope.launch {
+            try {
+                userTextToSpeech = UserTextToSpeech(context, TTSEngineType.DEFAULT)
+                userTextToSpeech?.reinitialize()
+            } catch (e: Exception) {
+                // TTS 初始化失败不影响应用启动，记录日志即可
+                Log.e("ReadEarApplication", "TTS 初始化失败：${e.message}", e)
+            }
+        }
     }
     
     override fun onTerminate() {

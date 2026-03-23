@@ -218,14 +218,28 @@ class MainActivity : ComponentActivity() {
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
                 val restoredList = fileRepository.loadFileList()
-                restoredList.forEach { fileItem ->
-                    requestUriPermission(fileItem.fileUri)
+                
+                // 批量请求 URI 权限，不阻塞 UI
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    restoredList.forEach { fileItem ->
+                        try {
+                            requestUriPermission(fileItem.fileUri)
+                        } catch (e: Exception) {
+                            // 忽略单个文件的权限请求失败
+                        }
+                    }
                 }
+                
+                // 在主线程更新 UI
                 with(kotlinx.coroutines.Dispatchers.Main) {
                     fileList = restoredList
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                // 即使出错也显示空列表，避免 UI 卡住
+                with(kotlinx.coroutines.Dispatchers.Main) {
+                    fileList = emptyList()
+                }
             }
         }
     }
