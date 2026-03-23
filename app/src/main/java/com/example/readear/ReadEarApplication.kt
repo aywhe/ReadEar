@@ -2,8 +2,8 @@ package com.example.readear
 
 import android.app.Application
 import com.example.readear.data.BooksCache
-import com.example.readear.parser.TTSEngineType
-import com.example.readear.parser.UserTextToSpeech
+import com.example.readear.speech.TTSEngineType
+import com.example.readear.speech.UserTextToSpeech
 
 /**
  * 全局 Application 类

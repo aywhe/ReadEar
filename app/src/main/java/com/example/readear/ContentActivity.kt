@@ -47,15 +47,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.core.net.toUri
 import com.example.readear.parser.TextChunk
-import com.example.readear.parser.TextManager
-import com.example.readear.parser.DefaultTextToSpeech
+import com.example.readear.manager.TextManager
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import com.example.readear.data.BooksCache
 import com.example.readear.data.CacheManager
 import com.example.readear.data.PagesCache
 import com.example.readear.data.SearchResults
 import com.example.readear.parser.FileTypeUtils
-import com.example.readear.parser.UserTextToSpeech
 import kotlin.math.sqrt
 import kotlin.math.abs
 

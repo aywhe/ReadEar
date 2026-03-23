@@ -1,17 +1,17 @@
-package com.example.readear.parser
+package com.example.readear.manager
 
 import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.util.Log
-import com.example.readear.FileType
-import com.example.readear.data.Book
 import com.example.readear.data.BooksCache
 import com.example.readear.data.CacheCoordinator
 import com.example.readear.data.CacheManager
 import com.example.readear.data.Page
 import com.example.readear.data.PagesCache
+import com.example.readear.parser.TextChunk
+import com.example.readear.parser.TextLoader
 
 /**
  * 文本加载状态

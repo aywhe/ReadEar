@@ -1,4 +1,4 @@
-package com.example.readear.parser
+package com.example.readear.speech
 
 import android.content.Context
 import android.content.Intent
