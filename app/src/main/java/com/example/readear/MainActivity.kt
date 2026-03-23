@@ -767,6 +767,35 @@ fun FileListItem(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showDeleteButton by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val cacheManager = remember { CacheManager(context) }
+
+    // 使用 State 来存储异步加载的数据
+    var lastReadingPageNumber by remember { mutableStateOf<Int?>(null) }
+    var totalPages by remember { mutableStateOf(0) }
+    
+    // 在 LaunchedEffect 中异步加载数据
+    LaunchedEffect(file.fileUri) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            lastReadingPageNumber = cacheManager.loadReadingProgress(file.fileUri)
+            totalPages = cacheManager.getTotalPagesCount(file.fileUri)
+        }
+    }
+    
+    // 计算阅读进度百分比和颜色
+    val progressInfo = remember(lastReadingPageNumber, totalPages) {
+        if (totalPages > 0 && lastReadingPageNumber != null) {
+            val percentage = ((lastReadingPageNumber!! + 1).toFloat() / totalPages * 100).toInt()
+            val color = when {
+                lastReadingPageNumber!! >= totalPages - 1 -> Color.Gray  // 最后一页，绿色
+                else -> Color.Black  // 其他情况，蓝色
+            }
+            Pair(percentage, color)
+        } else {
+            null
+        }
+    }
+
 
     LaunchedEffect(isDragging) {
         if (isDragging) {
@@ -803,13 +832,29 @@ fun FileListItem(
                     text = file.fileName,
                     style = MaterialTheme.typography.bodyLarge
                 )
-
-                if (file.fileSize > 0L) {
-                    Text(
-                        text = formatFileSize(file.fileSize),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // 文件大小
+                    if (file.fileSize > 0L) {
+                        Text(
+                            text = formatFileSize(file.fileSize),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                                
+                    // 阅读进度百分比
+                    progressInfo?.let { (percentage, color) ->
+                        Text(
+                            text = "已读 $percentage%",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = color
+                        )
+                    }
                 }
             }
             AnimatedVisibility(
