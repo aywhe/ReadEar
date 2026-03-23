@@ -37,12 +37,13 @@ enum class TextLoadingState {
  * 
  * @param context Context
  */
-class TextManager(private val context: Context) {
-    
-    private val booksCache: BooksCache = BooksCache
-    private val textExtractorFactory: TextExtractorFactory = TextExtractorFactory(context)
-    private val textLoader: TextLoader = TextLoader(textExtractorFactory)
-    private val cacheCoordinator: CacheCoordinator = CacheCoordinator(context, booksCache)
+class TextManager(
+    private val context: Context,
+    private val booksCache: BooksCache,
+    private val cacheManager: CacheManager
+) {
+    private val textLoader: TextLoader = TextLoader(context)
+    private val cacheCoordinator: CacheCoordinator = CacheCoordinator(booksCache, cacheManager)
     
     companion object {
         private const val TAG = "TextManager"
@@ -90,6 +91,15 @@ class TextManager(private val context: Context) {
             Log.e(TAG, "获取页面失败：$pageNumber, ${e.message}", e)
             null
         }
+    }
+    
+    /**
+     * 获取指定 URI 的 PagesCache 实例（用于搜索功能）
+     * @param uri 文件 URI
+     * @return 返回 PagesCache，如果不存在返回 null
+     */
+    fun getPagesCache(uri: String): PagesCache? {
+        return booksCache.getCache(uri)
     }
 
     /**
@@ -174,11 +184,10 @@ class TextManager(private val context: Context) {
      * 3. 如果都不完整，启动后台提取任务
      * 
      * @param uri 文件 URI
-     * @param fileType 文件类型
      * @param avgCharsPerLine 每行平均字符数
      * @param maxLinesPerPage 每页最大行数
      */
-    suspend fun startLoadPages(uri: Uri, fileType: FileType, avgCharsPerLine: Int, maxLinesPerPage: Int) {
+    suspend fun startLoadPages(uri: Uri, avgCharsPerLine: Int, maxLinesPerPage: Int) {
         val uriString = uri.toString()
         
         try {
@@ -205,7 +214,7 @@ class TextManager(private val context: Context) {
             } else {
                 Log.d(TAG, "启动后台提取任务：$uriString")
                 onLoadingStateChanged?.invoke(uriString, TextLoadingState.LOADING)
-                extractTextFromFileAndSaveCache(uri, fileType, avgCharsPerLine, maxLinesPerPage)
+                extractTextFromFileAndSaveCache(uri, avgCharsPerLine, maxLinesPerPage)
             }
         } catch (e: Exception) {
             Log.e(TAG, "同步加载页面失败：${e.message}", e)
@@ -218,7 +227,6 @@ class TextManager(private val context: Context) {
      */
     private suspend fun extractTextFromFileAndSaveCache(
         uri: Uri,
-        fileType: FileType,
         avgCharsPerLine: Int,
         maxLinesPerPage: Int
     ) = withContext(Dispatchers.IO) {
@@ -233,7 +241,7 @@ class TextManager(private val context: Context) {
             var lastPageIndex = 0
             var totalWords = 0
             
-            textLoader.extractAndPaginate(uri, fileType, avgCharsPerLine, maxLinesPerPage).collect { textChunk ->
+            textLoader.extractAndPaginate(uri, avgCharsPerLine, maxLinesPerPage).collect { textChunk ->
                 try {
                     val page = Page(
                         bookId = uriString,
