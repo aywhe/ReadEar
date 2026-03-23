@@ -1,9 +1,7 @@
 package com.example.readear
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -48,7 +46,6 @@ import kotlinx.coroutines.launch
 import androidx.core.net.toUri
 import com.example.readear.parser.TextChunk
 import com.example.readear.manager.TextManager
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.readear.data.CacheManager
 import com.example.readear.data.PagesCache
 import com.example.readear.data.SearchResults
@@ -82,27 +79,9 @@ class ContentActivity : ComponentActivity() {
     private val cacheManager by lazy { CacheManager(this) }
     private val textManager by lazy { TextManager(this, app.booksCache, cacheManager) }
 
-    // 定时器广播接收器
-    private val timerStopReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.example.readear.STOP_SPEAKING") {
-                stopSpeaking()
-                Log.d("ContentActivity", "收到定时器广播，已停止播放")
-                Toast.makeText(this@ContentActivity, "定时时间到，已停止播放", Toast.LENGTH_SHORT)
-                    .show()
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        // 注册广播接收器
-        LocalBroadcastManager.getInstance(this).registerReceiver(
-            timerStopReceiver,
-            IntentFilter("com.example.readear.STOP_SPEAKING")
-        )
 
         val fileUriString = intent.getStringExtra(EXTRA_FILE_URI) ?: ""
         val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "未知文件"
@@ -165,7 +144,7 @@ class ContentActivity : ComponentActivity() {
             showTTSSettingsDialog()
         }
     }
-
+    
     private fun playText(text: String) {
         val readingText = text.trim()
         if (readingText.isNotEmpty()) {
@@ -231,8 +210,6 @@ class ContentActivity : ComponentActivity() {
         userTextToSpeech?.stopSpeaking()
         isSpeaking = false
         isTTSAvailable = false
-
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(timerStopReceiver)
     }
 
     private fun saveReadingProgress() {

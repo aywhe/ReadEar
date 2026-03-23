@@ -8,6 +8,9 @@ import com.example.readear.speech.UserTextToSpeech
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -19,7 +22,7 @@ import kotlinx.coroutines.launch
 class ReadEarApplication : Application() {
     val booksCache = BooksCache()
     var userTextToSpeech: UserTextToSpeech? = null
-    
+
     // 应用级别的 CoroutineScope，用于后台异步任务
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
