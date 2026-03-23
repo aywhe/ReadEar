@@ -50,7 +50,12 @@ import com.example.readear.parser.TextChunk
 import com.example.readear.parser.TextManager
 import com.example.readear.parser.DefaultTextToSpeech
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.example.readear.data.BooksCache
+import com.example.readear.data.CacheManager
+import com.example.readear.data.PagesCache
 import com.example.readear.data.SearchResults
+import com.example.readear.parser.FileTypeUtils
+import com.example.readear.parser.UserTextToSpeech
 import kotlin.math.sqrt
 import kotlin.math.abs
 
@@ -62,8 +67,9 @@ class ContentActivity : ComponentActivity() {
         const val EXTRA_FILE_TYPE = "extra_file_type"
     }
 
+    private val app = this.applicationContext as ReadEarApplication
     // TTS 相关
-    private var speechManager: DefaultTextToSpeech? = null
+    private val userTextToSpeech = app.userTextToSpeech
     private var isSpeaking by mutableStateOf(false)
     private var isPlayDone by mutableStateOf(false)
     private var currentTextToSpeak = ""
@@ -71,6 +77,10 @@ class ContentActivity : ComponentActivity() {
 
     // 当前阅读页码
     private var currentPageNumber: Int = 0
+
+    private val cacheManager = CacheManager(this)
+    private val textManager = TextManager(this,
+        app.booksCache, cacheManager)
 
     // 定时器广播接收器
     private val timerStopReceiver = object : BroadcastReceiver() {
@@ -102,9 +112,6 @@ class ContentActivity : ComponentActivity() {
         val fileUri = fileUriString.toUri()
         ensurePersistedUriPermission(fileUri)
 
-        // 初始化 TTS 管理器
-        speechManager = DefaultTextToSpeech.getInstance(this)
-
         // 监听 TTS 状态变化
         observeTTSState()
 
@@ -119,7 +126,7 @@ class ContentActivity : ComponentActivity() {
                 ContentScreen(
                     uri = fileUri,
                     fileName = fileName,
-                    fileType = fileType,
+                    textManager = textManager,
                     onNavigateBack = { finish() },
                     onPageChanged = { page -> currentPageNumber = page },
                     onPlayText = { text -> playText(text) },
@@ -134,26 +141,26 @@ class ContentActivity : ComponentActivity() {
     private fun observeTTSState() {
         lifecycleScope.launch {
             launch {
-                speechManager?.isSpeaking?.collect { speaking ->
+                userTextToSpeech.isSpeaking.collect { speaking ->
                     isSpeaking = speaking
                     Log.d("ContentActivity", "TTS 状态更新：isSpeaking=$speaking")
                 }
             }
             launch {
-                speechManager?.isPlayDone?.collect { done ->
+                userTextToSpeech.isPlayDone.collect { done ->
                     isPlayDone = done
                     Log.d("ContentActivity", "TTS 状态更新：isPlayDone=$done")
                 }
             }
             launch {
-                speechManager?.isTTSAvailable?.collect { available ->
+                userTextToSpeech.isTTSAvailable.collect { available ->
                     isTTSAvailable = available
                     Log.d("ContentActivity", "TTS 状态更新：isTTSAvailable=$available")
                 }
             }
         }
 
-        speechManager?.onTTSError = { error ->
+        userTextToSpeech.onTTSError = { error ->
             Log.e("ContentActivity", "TTS 错误：$error")
             showTTSSettingsDialog()
         }
@@ -165,8 +172,8 @@ class ContentActivity : ComponentActivity() {
             currentTextToSpeak = text
             Log.d("ContentActivity", "开始播放文本：${text.length} 字符")
 
-            val success = speechManager?.playText(text)
-            if (success == false) {
+            val success = userTextToSpeech.playText(text)
+            if (success == null || !success) {
                 Log.w("ContentActivity", "播放失败，TTS 可能未就绪")
                 Toast.makeText(this, "TTS 未就绪，请稍后再试", Toast.LENGTH_SHORT).show()
             }
@@ -177,7 +184,7 @@ class ContentActivity : ComponentActivity() {
     }
 
     private fun stopSpeaking() {
-        speechManager?.stopSpeaking()
+        userTextToSpeech.stopSpeaking()
     }
 
     /**
@@ -221,8 +228,8 @@ class ContentActivity : ComponentActivity() {
         saveReadingProgress()
         releasePersistedUriPermission()
 
-        speechManager?.stopSpeaking()
-        speechManager = null
+        userTextToSpeech.stopSpeaking()
+        userTextToSpeech.release()
         isSpeaking = false
         isTTSAvailable = false
 
@@ -237,7 +244,6 @@ class ContentActivity : ComponentActivity() {
 
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                 try {
-                    val textManager = TextManager(applicationContext)
                     textManager.saveReadingProgress(fileUriString, currentPageNumber)
                     Log.d("ContentActivity", "进度保存成功")
                 } catch (e: Exception) {
@@ -276,7 +282,7 @@ class ContentActivity : ComponentActivity() {
             .setTitle("TTS 引擎不可用")
             .setMessage("请安装或启用文本转语音引擎。\n\n路径：设置 > 辅助功能 > 文字转语音输出")
             .setPositiveButton("前往设置") { _, _ ->
-                speechManager?.openTTSSettings(this)
+                userTextToSpeech.openTTSSettings()
             }
             .setNegativeButton("取消", null)
             .show()
@@ -288,7 +294,7 @@ class ContentActivity : ComponentActivity() {
 fun ContentScreen(
     uri: Uri,
     fileName: String,
-    fileType: FileType,
+    textManager: TextManager,
     onNavigateBack: () -> Unit,
     onPageChanged: (Int) -> Unit = {},
     onPlayText: (String) -> Unit = {},
@@ -332,18 +338,13 @@ fun ContentScreen(
             calculateLayoutParameters(context)
         }
     }
-
-    // TextManager 实例（使用 remember 避免重复创建）
-    val textManager = remember(context) { TextManager(context.applicationContext) }
-
     // 启动初始化：同步内存数据并恢复上次阅读位置
-    LaunchedEffect(uri, fileType) {
+    LaunchedEffect(uri) {
         try {
             // 1. 在后台启动协程执行 syncLoadPages，不阻塞当前协程
             launch(Dispatchers.IO) {
                 textManager.startLoadPages(
                     uri,
-                    fileType,
                     layoutParams.avgCharsPerLine,
                     layoutParams.maxLinesPerPage
                 )
@@ -596,6 +597,7 @@ fun ContentScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = {
+                            val fileType = FileTypeUtils.fromUri(context, uri)
                             val intent = Intent(context, ContentActivity::class.java).apply {
                                 putExtra(ContentActivity.EXTRA_FILE_URI, uri.toString())
                                 putExtra(ContentActivity.EXTRA_FILE_NAME, fileName)
@@ -661,8 +663,10 @@ fun ContentScreen(
                                 isHightLight.value = currentMatch
                             } else {
                                 // SearchResults 中没有记录，需要实时检查 BooksCache 中的页面内容
-                                val pagesCache =
-                                    com.example.readear.data.BooksCache.getCache(uri.toString())
+                                // 从 Application 中获取 booksCache
+                                val app = context.applicationContext as ReadEarApplication
+                                val pagesCache = app.booksCache.getCache(uri.toString())
+                                                                
                                 if (pagesCache != null) {
                                     val pageContent = pagesCache.getPage(page)
                                     if (pageContent != null) {
@@ -844,7 +848,7 @@ fun ContentScreen(
                 }
             },
             currentPage = pagerState.currentPage,
-            textManager = textManager,
+            pagesCache = textManager.getPagesCache(uri.toString()),
             uri = uri.toString(),
             query = query,
             onQueryChanged = { newQuery ->
@@ -1301,7 +1305,7 @@ fun checkIfShake(
  * @param onDismiss 关闭窗口的回调
  * @param onNavigateToPage 导航到指定页面的回调，参数为目标页码
  * @param currentPage 当前页码，用于显示和搜索逻辑
- * @param textManager TextManager 实例，用于执行搜索操作
+ * @param pagesCache 书籍的页码缓存，用于搜索逻辑
  * @param uri 当前书籍的 URI，用于搜索上下文
  * @param query 当前搜索查询文本
  * @param onQueryChanged 搜索查询文本变化的回调，参数为新的查询文本
@@ -1311,7 +1315,7 @@ fun DraggableSearchWindow(
     onDismiss: () -> Unit,
     onNavigateToPage: (Int) -> Unit,
     currentPage: Int,
-    textManager: TextManager,
+    pagesCache: PagesCache?,
     uri: String,
     query: String = "",
     onQueryChanged: (String) -> Unit = {}
@@ -1319,7 +1323,6 @@ fun DraggableSearchWindow(
     val density = LocalDensity.current
     var offset by remember { mutableStateOf(IntOffset(0, with(density) { 200.dp.roundToPx() })) }
     var searchQuery by remember { mutableStateOf("") }
-    var totalPages by remember { mutableIntStateOf(0) }
     var isSearching by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
@@ -1410,7 +1413,7 @@ fun DraggableSearchWindow(
                                     uri,
                                     searchQuery,
                                     currentPage,
-                                    textManager
+                                    pagesCache
                                 ) { page, finished ->
                                     if (page >= 0) {
                                         onNavigateToPage(page)
@@ -1446,7 +1449,7 @@ fun DraggableSearchWindow(
                                     uri,
                                     searchQuery,
                                     currentPage,
-                                    textManager
+                                    pagesCache
                                 ) { page, finished ->
                                     if (page >= 0) {
                                         onNavigateToPage(page)
@@ -1476,19 +1479,17 @@ fun DraggableSearchWindow(
  * @param uri 文件 URI
  * @param searchText 搜索文本
  * @param currentPage 当前页码
- * @param textManager TextManager 实例
+ * @param pagesCache 页面缓存
  * @param onPageFound 找到页面时的回调，参数为找到的页码和是否完成搜索
  */
 private suspend fun searchNext(
     uri: String,
     searchText: String,
     currentPage: Int,
-    textManager: TextManager,
+    pagesCache: PagesCache?,
     onPageFound: (Int, Boolean) -> Unit
 ) {
     try {
-        // 1. 获取 BooksCache 中的缓存
-        val pagesCache = com.example.readear.data.BooksCache.getCache(uri)
         if (pagesCache == null) {
             Log.w("DraggableSearchWindow", "未找到页面缓存：$uri")
             onPageFound(-1, true)
@@ -1594,19 +1595,17 @@ private suspend fun searchNext(
  * @param uri 文件 URI
  * @param searchText 搜索文本
  * @param currentPage 当前页码
- * @param textManager TextManager 实例
+ * @param pagesCache 页面缓存
  * @param onPageFound 找到页面时的回调，参数为找到的页码和是否完成搜索
  */
 private suspend fun searchPrevious(
     uri: String,
     searchText: String,
     currentPage: Int,
-    textManager: TextManager,
+    pagesCache: PagesCache?,
     onPageFound: (Int, Boolean) -> Unit
 ) {
     try {
-        // 1. 获取 BooksCache 中的缓存
-        val pagesCache = com.example.readear.data.BooksCache.getCache(uri)
         if (pagesCache == null) {
             Log.w("DraggableSearchWindow", "未找到页面缓存：$uri")
             onPageFound(-1, true)

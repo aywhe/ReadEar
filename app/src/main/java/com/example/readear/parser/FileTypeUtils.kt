@@ -2,6 +2,7 @@ package com.example.readear.parser
 
 import android.content.Context
 import android.net.Uri
+import com.example.readear.ContentActivity.Companion.EXTRA_FILE_TYPE
 import com.example.readear.FileType
 
 object FileTypeUtils {

@@ -204,7 +204,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun releaseUriPermission(fileUri: String) {
         try {
-            val uri = Uri.parse(fileUri)
+            val uri = fileUri.toUri()
             contentResolver.releasePersistableUriPermission(
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -487,14 +487,8 @@ fun SettingsDialog(
  * 打开系统 TTS 设置页面
  */
 private fun openTTSSettings(context: Context) {
-    try {
-        // 使用 Intent 跳转到系统的 TTS 设置页面
-        val intent = Intent("com.android.settings.TTS_SETTINGS")
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-    } catch (e: Exception) {
-        Toast.makeText(context, "无法打开 TTS 设置", Toast.LENGTH_SHORT).show()
-    }
+    val app = context.applicationContext as ReadEarApplication
+    app.userTextToSpeech.openTTSSettings()
 }
 
 data class FileItem(
