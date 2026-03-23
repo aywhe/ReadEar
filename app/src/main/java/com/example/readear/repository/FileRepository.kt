@@ -18,6 +18,16 @@ import org.json.JSONObject
 
 val Context.repositoryDataStore: DataStore<Preferences> by preferencesDataStore(name = "file_list")
 
+/**
+ * 文件仓库管理类（非单例）
+ * 
+ * 职责：
+ * - 管理文件列表的持久化存储
+ * - 提供异步保存和加载接口
+ * - 使用 DataStore Preferences 存储
+ * 
+ * 注意：此类不是单例，每次创建新实例时会持有独立的 CoroutineScope
+ */
 class FileRepository(private val context: Context) {
     
     private val dataStore = context.repositoryDataStore

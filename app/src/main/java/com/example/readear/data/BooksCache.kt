@@ -3,14 +3,19 @@ package com.example.readear.data
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 全局页面缓存管理器（单例）
+ * 全局页面缓存管理器（非单例模式）
  * 
  * 职责：
  * - 管理所有文件的页面缓存
- * - 提供全局访问点
+ * - 提供统一的缓存管理接口
  * - 协调内存缓存和磁盘缓存
+ * 
+ * 设计说明：
+ * - 非单例模式，允许创建多个实例
+ * - 每个实例独立管理自己的缓存集合
+ * - 使用 ConcurrentHashMap 保证线程安全
  */
-object BooksCache {
+class BooksCache {
 
     private val cacheMap = ConcurrentHashMap<String, PagesCache>()
 

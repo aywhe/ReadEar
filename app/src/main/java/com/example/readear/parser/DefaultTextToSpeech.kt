@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
 
 /**
- * TTS 语音管理器
+ * TTS 语音管理器（系统默认 TTS 引擎实现）
  *
  * 职责：
  * - 管理 TextToSpeech 的生命周期
@@ -21,36 +21,17 @@ import java.util.Locale
  * - 处理 TTS 初始化和错误
  *
  * 特性：
- * - 单例模式，全局访问
  * - 使用 StateFlow 响应式更新状态
  * - 支持自定义 UtteranceId 追踪
  * - 完整的错误处理和日志记录
  */
-class DefaultTextToSpeech private constructor(
+class DefaultTextToSpeech(
     private val context: Context
-) : TextToSpeech.OnInitListener {
+) : TextToSpeech.OnInitListener, TextToSpeechEngine {
 
     companion object {
         private const val TAG = "DefaultTextToSpeech"
         private const val UTTERANCE_ID_DEFAULT = "utterance_default"
-
-        @Volatile
-        @Suppress("StaticFieldLeak")
-       private var instance: DefaultTextToSpeech? = null
-
-        /**
-         * 获取单例实例（延迟初始化）
-         * @param context 应用上下文
-         * @return SpeechManager 单例
-         */
-        fun getInstance(context: Context): DefaultTextToSpeech {
-            return instance ?: synchronized(this) {
-                // 重要：使用 ApplicationContext 避免内存泄漏
-                instance ?: DefaultTextToSpeech(context.applicationContext).also {
-                    instance = it
-                }
-            }
-        }
     }
 
     // TTS 核心组件
@@ -58,20 +39,20 @@ class DefaultTextToSpeech private constructor(
 
     // 状态流（使用 asStateFlow 避免外部修改）
     private val _isSpeaking = MutableStateFlow(false)
-    val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+    override val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
 
     private val _isPlayDone = MutableStateFlow(false)
-    val isPlayDone: StateFlow<Boolean> = _isPlayDone.asStateFlow()
+    override val isPlayDone: StateFlow<Boolean> = _isPlayDone.asStateFlow()
 
     private val _isTTSAvailable = MutableStateFlow(false)
-    val isTTSAvailable: StateFlow<Boolean> = _isTTSAvailable.asStateFlow()
+    override val isTTSAvailable: StateFlow<Boolean> = _isTTSAvailable.asStateFlow()
 
     private val _currentText = MutableStateFlow("")
-    val currentText: StateFlow<String> = _currentText.asStateFlow()
+    override val currentText: StateFlow<String> = _currentText.asStateFlow()
 
     // 状态回调（可选，方便传统用法）
-    var onTTSInitComplete: (() -> Unit)? = null
-    var onTTSError: ((String) -> Unit)? = null
+    override var onTTSInitComplete: (() -> Unit)? = null
+    override var onTTSError: ((String) -> Unit)? = null
 
     // 初始化标记
     private var isInitialized = false
@@ -227,15 +208,16 @@ class DefaultTextToSpeech private constructor(
      * 播放文本
      *
      * @param text 要播放的文本内容
-     * @param queueMode 队列模式，默认为 QUEUE_FLUSH（立即播放）
      * @param utteranceId 语音 ID，用于追踪播放状态，默认为 null
      * @return 是否成功开始播放
      */
-    fun playText(
+    override fun playText(
         text: String,
-        queueMode: Int = TextToSpeech.QUEUE_FLUSH,
-        utteranceId: String? = null
+        utteranceId: String?
     ): Boolean {
+
+        val queueMode = TextToSpeech.QUEUE_FLUSH
+
         // 检查 TTS 是否可用
         if (!isTTSAvailable.value) {
             Log.w(TAG, "TTS 不可用，请检查设置")
@@ -284,7 +266,7 @@ class DefaultTextToSpeech private constructor(
     /**
      * 停止播放
      */
-    fun stopSpeaking() {
+    override fun stopSpeaking() {
         try {
             Log.d(TAG, "停止播放")
             textToSpeech?.stop()
@@ -297,7 +279,7 @@ class DefaultTextToSpeech private constructor(
     /**
      * 检查是否正在说话
      */
-    fun isCurrentlySpeaking(): Boolean {
+    override fun isCurrentlySpeaking(): Boolean {
         return textToSpeech?.isSpeaking ?: false
     }
 
@@ -306,7 +288,7 @@ class DefaultTextToSpeech private constructor(
      *
      * @param speechRate 语速，0.5f 为慢速，1.0f 为正常，2.0f 为快速
      */
-    fun setSpeechRate(speechRate: Float) {
+    override fun setSpeechRate(speechRate: Float) {
         try {
             textToSpeech?.setSpeechRate(speechRate.coerceIn(0.1f, 4.0f))
             Log.d(TAG, "语速设置为：$speechRate")
@@ -320,7 +302,7 @@ class DefaultTextToSpeech private constructor(
      *
      * @param pitch 音调，0.5f 为低音，1.0f 为正常，2.0f 为高音
      */
-    fun setPitch(pitch: Float) {
+    override fun setPitch(pitch: Float) {
         try {
             textToSpeech?.setPitch(pitch.coerceIn(0.1f, 2.0f))
             Log.d(TAG, "音调设置为：$pitch")
@@ -332,7 +314,7 @@ class DefaultTextToSpeech private constructor(
     /**
      * 释放资源
      */
-    fun release() {
+    override fun release() {
         Log.d(TAG, "释放 TTS 资源")
         try {
             stopSpeaking()
@@ -351,7 +333,7 @@ class DefaultTextToSpeech private constructor(
     /**
      * 重新初始化 TTS
      */
-    fun reinitialize() {
+    override fun reinitialize() {
         Log.d(TAG, "重新初始化 TTS")
         release()
         initializeTTS()
@@ -360,7 +342,7 @@ class DefaultTextToSpeech private constructor(
     /**
      * 打开 TTS 设置页面
      */
-    fun openTTSSettings(context: Context) {
+    override fun openTTSSettings() {
         try {
             val intent = Intent("com.android.settings.TTS_SETTINGS")
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
