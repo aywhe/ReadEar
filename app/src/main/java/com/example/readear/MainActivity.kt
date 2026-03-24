@@ -428,14 +428,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        // 不做耗时操作，避免影响界面流畅度
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 清理定时器
+        stopTimer()
+        // 在 onStop 中保存文件列表，确保数据持久化
         fileRepository.saveFileList(fileList)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        fileRepository.saveFileList(fileList)
-        // 清理定时器
-        stopTimer()
     }
 }
 
