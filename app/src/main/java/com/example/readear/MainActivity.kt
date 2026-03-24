@@ -54,6 +54,7 @@ import sh.calvin.reorderable.*
 import androidx.core.net.toUri
 import com.example.readear.data.BooksCache
 import com.example.readear.data.CacheManager
+import kotlinx.coroutines.delay
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "file_list")
 
@@ -760,31 +761,50 @@ fun FileListItem(
     val cacheManager = remember { CacheManager(context) }
 
     // 它自动更新不好弄，百分比的实现也似乎可有可无，所以还是算了
-//    // 使用 State 来存储异步加载的数据
-//    var lastReadingPageNumber by remember { mutableStateOf<Int?>(null) }
-//    var totalPages by remember { mutableStateOf(0) }
-//
-//    // 在 LaunchedEffect 中异步加载数据
-//    LaunchedEffect(file.fileUri) {
-//        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-//            lastReadingPageNumber = cacheManager.loadReadingProgress(file.fileUri)
-//            totalPages = cacheManager.getTotalPagesCount(file.fileUri)
-//        }
-//    }
-//
-//    // 计算阅读进度百分比和颜色
-//    val progressInfo = remember(lastReadingPageNumber, totalPages) {
-//        if (totalPages > 0 && lastReadingPageNumber != null) {
-//            val percentage = ((lastReadingPageNumber!! + 1).toFloat() / totalPages * 100).toInt()
-//            val color = when {
-//                lastReadingPageNumber!! >= totalPages - 1 -> Color.Gray  // 最后一页，绿色
-//                else -> Color.Black  // 其他情况，蓝色
-//            }
-//            Pair(percentage, color)
-//        } else {
-//            null
-//        }
-//    }
+    // 使用 State 来存储异步加载的数据
+    var lastReadingPageNumber by remember { mutableStateOf<Int?>(null) }
+    var totalPages: Int by remember { mutableStateOf(0) }
+    val app = LocalContext.current.applicationContext as ReadEarApplication
+
+
+    // 在 LaunchedEffect 中异步加载数据
+    LaunchedEffect(file.fileUri) {
+        scope.launch {
+            lastReadingPageNumber = cacheManager.loadReadingProgress(file.fileUri)
+            totalPages = cacheManager.getTotalPagesCount(file.fileUri)
+        }
+    }
+    DisposableEffect(Unit) {
+        // 定时获取booksCache中的lastReadingPageNumber
+        val job = scope.launch {
+            while (true) {
+                delay(5000)
+                val pagesCache = app.booksCache.getCache(file.fileUri)
+                if(pagesCache != null) {
+                    lastReadingPageNumber = pagesCache.getLastReadingPageNumber()
+                    totalPages = pagesCache.totalPages
+                }
+            }
+        }
+        onDispose {
+            job.cancel()
+        }
+    }
+
+    // 计算阅读进度百分比和颜色
+    val progressInfo = remember(lastReadingPageNumber, totalPages) {
+        if (totalPages > 0 && lastReadingPageNumber != null) {
+            val percentage = ((lastReadingPageNumber!! + 1).toFloat() / totalPages * 100).toInt()
+            val color = when {
+                lastReadingPageNumber!! >= totalPages - 1 -> Color.Gray  // 最后一页，绿色
+                lastReadingPageNumber == 0 -> Color.Green
+                else -> Color.Black  // 其他情况，蓝色
+            }
+            Pair(percentage, color)
+        } else {
+            null
+        }
+    }
 
 
     LaunchedEffect(isDragging) {
@@ -837,14 +857,14 @@ fun FileListItem(
                         )
                     }
                                 
-//                    // 阅读进度百分比
-//                    progressInfo?.let { (percentage, color) ->
-//                        Text(
-//                            text = "已读 $percentage%",
-//                            style = MaterialTheme.typography.bodySmall,
-//                            color = color
-//                        )
-//                    }
+                    // 阅读进度百分比
+                    progressInfo?.let { (percentage, color) ->
+                        Text(
+                            text = "已读 $percentage%",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = color
+                        )
+                    }
                 }
             }
             AnimatedVisibility(
