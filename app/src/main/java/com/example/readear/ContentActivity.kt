@@ -699,49 +699,55 @@ fun ContentScreen(
                         }
                     }
 
-                    // 添加可拖动的播放按钮
-                    DraggablePlayButton(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(16.dp),
-                        isSpeaking = isSpeaking,
-                        onClick = {
-                            lifecycleScope.launch {
-                                val currentPageContent =
-                                    textManager.getPage(uri.toString(), pagerState.currentPage)
-                                if (currentPageContent != null) {
-                                    // 更新当前播放页面为当前显示的页面
-                                    currentSpeakingPage = pagerState.currentPage
-                                    onPlayText(currentPageContent.content)
-                                } else {
-                                    Toast.makeText(context, "当前页面内容为空", Toast.LENGTH_SHORT)
-                                        .show()
-                                }
-                            }
-                        },
-                        onStop = { onStopSpeaking() },
-                        onShake = {
-                            Log.d(
-                                "DraggablePlayButton",
-                                "检测到按钮晃动，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}"
-                            )
-                            if (isSpeaking && currentSpeakingPage != pagerState.currentPage) {
+                    if(!isFullScreen) {
+                        // 添加可拖动的播放按钮
+                        DraggablePlayButton(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp),
+                            isSpeaking = isSpeaking,
+                            onClick = {
                                 lifecycleScope.launch {
-                                    Log.d(
-                                        "DraggablePlayButton",
-                                        "按钮晃动后跳转到当前播放页面：${pagerState.currentPage} -> $currentSpeakingPage"
-                                    )
-                                    pagerState.scrollToPage(currentSpeakingPage)
-                                    Toast.makeText(
-                                        context,
-                                        "已跳转到当前播放页面",
-                                        Toast.LENGTH_SHORT
-                                    )
-                                        .show()
+                                    val currentPageContent =
+                                        textManager.getPage(uri.toString(), pagerState.currentPage)
+                                    if (currentPageContent != null) {
+                                        // 更新当前播放页面为当前显示的页面
+                                        currentSpeakingPage = pagerState.currentPage
+                                        onPlayText(currentPageContent.content)
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "当前页面内容为空",
+                                            Toast.LENGTH_SHORT
+                                        )
+                                            .show()
+                                    }
+                                }
+                            },
+                            onStop = { onStopSpeaking() },
+                            onShake = {
+                                Log.d(
+                                    "DraggablePlayButton",
+                                    "检测到按钮晃动，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}"
+                                )
+                                if (isSpeaking && currentSpeakingPage != pagerState.currentPage) {
+                                    lifecycleScope.launch {
+                                        Log.d(
+                                            "DraggablePlayButton",
+                                            "按钮晃动后跳转到当前播放页面：${pagerState.currentPage} -> $currentSpeakingPage"
+                                        )
+                                        pagerState.scrollToPage(currentSpeakingPage)
+                                        Toast.makeText(
+                                            context,
+                                            "已跳转到当前播放页面",
+                                            Toast.LENGTH_SHORT
+                                        )
+                                            .show()
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
 
                 else -> {
