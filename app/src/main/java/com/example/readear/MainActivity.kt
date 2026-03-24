@@ -796,9 +796,8 @@ fun FileListItem(
         if (totalPages > 0 && lastReadingPageNumber != null) {
             val percentage = ((lastReadingPageNumber!! + 1).toFloat() / totalPages * 100).toInt()
             val color = when {
-                lastReadingPageNumber!! >= totalPages - 1 -> Color.Gray  // 最后一页，绿色
-                lastReadingPageNumber == 0 -> Color.Green
-                else -> Color.Black  // 其他情况，蓝色
+                lastReadingPageNumber!! >= totalPages - 1 -> Color.Gray  // 最后一页
+                else -> Color.Black  // 其他情况
             }
             Pair(percentage, color)
         } else {
