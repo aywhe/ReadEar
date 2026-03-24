@@ -87,9 +87,8 @@ class ContentActivity : ComponentActivity() {
         val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "未知文件"
         val fileType = FileType.valueOf(intent.getStringExtra(EXTRA_FILE_TYPE) ?: FileType.TXT.name)
 
-        // 获取 URI 并请求持久化读取权限
+        // URI 持久化权限已在 MainActivity 中获取，这里无需重复申请
         val fileUri = fileUriString.toUri()
-        ensurePersistedUriPermission(fileUri)
 
         // 监听 TTS 状态变化
         observeTTSState()
@@ -162,23 +161,7 @@ class ContentActivity : ComponentActivity() {
         userTextToSpeech?.stopSpeaking()
     }
 
-    /**
-     * 确保已获取 URI 的持久化读取权限
-     */
-    private fun ensurePersistedUriPermission(uri: Uri) {
-        try {
-            if (!contentResolver.persistedUriPermissions.any {
-                    it.uri == uri && it.isReadPermission
-                }) {
-                contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
+
 
     override fun onPause() {
         super.onPause()
@@ -201,7 +184,7 @@ class ContentActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         saveReadingProgress()
-        releasePersistedUriPermission()
+        // URI 权限由 MainActivity 统一管理，这里不释放
 
         userTextToSpeech?.stopSpeaking()
         isSpeaking = false
@@ -225,29 +208,7 @@ class ContentActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * 释放持久化 URI 权限（如果需要的话）
-     */
-    private fun releasePersistedUriPermission() {
-        try {
-            val fileUriString = intent.getStringExtra(EXTRA_FILE_URI) ?: return
-            val uri = fileUriString.toUri()
 
-            // 检查是否有持久化权限
-            val hasPermission = contentResolver.persistedUriPermissions.any {
-                it.uri == uri && it.isReadPermission
-            }
-
-            if (hasPermission) {
-                contentResolver.releasePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
 
     private fun showTTSSettingsDialog() {
         android.app.AlertDialog.Builder(this)

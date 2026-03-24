@@ -59,11 +59,6 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "fi
 
 class MainActivity : ComponentActivity() {
     companion object {
-        // 屏幕信息（在应用启动时获取）
-        var screenDpi: Float = 0f
-        var screenWidthPx: Int = 0
-        var screenHeightPx: Int = 0
-
         // 定时器相关
         var countdownTimer: CountDownTimer? = null
         var remainingTimeMinutes by mutableStateOf<Int>(0)
@@ -106,12 +101,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        // 获取屏幕信息
-        val metrics = resources.displayMetrics
-        screenDpi = metrics.densityDpi.toFloat()
-        screenWidthPx = metrics.widthPixels
-        screenHeightPx = metrics.heightPixels
 
         fileRepository = FileRepository(applicationContext)
 
