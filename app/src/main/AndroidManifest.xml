@@ -16,6 +16,10 @@
         android:roundIcon="@mipmap/ic_launcher_manual_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.ReadEar">
+        <!-- ⭐ 添加版本名称元数据，供代码读取 -->
+        <meta-data
+            android:name="versionName"
+            android:value="${versionName}" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

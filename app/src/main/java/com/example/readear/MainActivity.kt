@@ -711,9 +711,16 @@ fun FileListScreen(
             onDismissRequest = { showAboutDialog = false },
             title = { Text("关于 ReadEar") },
             text = {
+                // ⭐ 自动从 Manifest 读取版本号
+                val versionName = try {
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                } catch (e: Exception) {
+                    "未知版本"
+                }
+                
                 Text(
                     text = """
-                        ReadEar - 智能听书助手 v1.3.0
+                        ReadEar - 智能听书助手 v$versionName
                         
                         主要功能：
                         • 支持 TXT、DOCX、PDF 格式

@@ -16,13 +16,16 @@ android {
         applicationId = "com.example.readear"
        minSdk = 26  // ⭐ 从 24 提升到 26
       targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3  // 每次发布递增
+        versionName = "1.3.0"  // 语义化版本号
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
         // ⭐ 保留这个配置（解决方法数超限）
         multiDexEnabled = true
+        
+        // ⭐ 添加版本信息到清单文件，供代码读取
+        manifestPlaceholders["versionName"] = versionName.toString()
     }
 
     buildTypes {
