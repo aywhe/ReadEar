@@ -866,7 +866,7 @@ fun FileListItem(
                     // 阅读进度百分比
                     progressInfo?.let { (percentage, color) ->
                         Text(
-                            text = "已读 $percentage%",
+                            text = "$percentage%",
                             style = MaterialTheme.typography.bodySmall,
                             color = color
                         )
