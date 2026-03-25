@@ -168,7 +168,7 @@ class TextManager(
             }
             
             // 再检查数据库
-            CacheManager(context).isCompleted(uri)
+            cacheManager.isCompleted(uri)
         } catch (e: Exception) {
             Log.e(TAG, "检查书籍完成状态失败：${e.message}", e)
             false
@@ -199,7 +199,7 @@ class TextManager(
             }
             
             val book = try {
-                CacheManager(context).getBook(uriString)
+                cacheManager.getBook(uriString)
             } catch (e: Exception) {
                 Log.e(TAG, "获取书籍信息失败：${e.message}", e)
                 null
