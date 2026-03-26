@@ -63,10 +63,10 @@ class ContentActivity : ComponentActivity() {
 
     // 使用懒加载，确保在 Activity 完全初始化后再获取 applicationContext
     private val app by lazy { applicationContext as ReadEarApplication }
-    
+
     // TTS 相关（使用懒加载）
     private val userTextToSpeech by lazy { app.userTextToSpeech }
-    
+
     private var isSpeaking by mutableStateOf(false)
     private var isPlayDone by mutableStateOf(false)
     private var currentTextToSpeak = ""
@@ -139,7 +139,7 @@ class ContentActivity : ComponentActivity() {
             showTTSSettingsDialog()
         }
     }
-    
+
     private fun playText(text: String) {
         val readingText = text.trim()
         if (readingText.isNotEmpty()) {
@@ -160,7 +160,6 @@ class ContentActivity : ComponentActivity() {
     private fun stopSpeaking() {
         userTextToSpeech?.stopSpeaking()
     }
-
 
 
     override fun onPause() {
@@ -209,7 +208,6 @@ class ContentActivity : ComponentActivity() {
     }
 
 
-
     private fun showTTSSettingsDialog() {
         android.app.AlertDialog.Builder(this)
             .setTitle("TTS 引擎不可用")
@@ -244,10 +242,10 @@ fun ContentScreen(
 
     // 上次阅读进度
     var lastReadingPage by remember { mutableStateOf<Int?>(null) }
-    var hasRestoredLastReading by remember { mutableStateOf(false) }
 
-    // 新增：是否正在初始化
-    var isInitializing by remember { mutableStateOf(true) }
+    var hasFirstScrolledToLastReading by remember { mutableStateOf(false) }
+
+    var isLoadPagesOver by remember { mutableStateOf(false) }
 
     // 全屏模式
     var isFullScreen by remember { mutableStateOf(false) }
@@ -272,51 +270,59 @@ fun ContentScreen(
         }
     }
     // 启动初始化：同步内存数据并恢复上次阅读位置
-    LaunchedEffect(uri) {
-        try {
-            // 1. 在后台启动协程执行 startLoadPages，不阻塞当前协程
-            launch(Dispatchers.IO) {
+    DisposableEffect(uri) {
+        // 1. 在后台启动协程执行 startLoadPages，不阻塞当前协程
+        val loadJob = lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                isLoadPagesOver = false
                 textManager.startLoadPages(
                     uri,
                     layoutParams.avgCharsPerLine,
                     layoutParams.maxLinesPerPage
                 )
+                Log.d("ContentActivity", "加载数据结束")
+            } catch (e: Exception) {
+                errorMessage = "加载数据错误：${e.message}"
+            }finally {
+                isLoadPagesOver = true
             }
-        } catch (e: Exception) {
-            errorMessage = "初始化失败：${e.message}"
-            isInitializing = false
         }
-        
-        // 2. 异步获取阅读进度（优化：减少重试次数，加快失败速度）
-        var retryCount = 0
-        val maxProgressRetry = 20  // 从 50 减少到 20，最多等待 200ms
-        var hasLoadedProgress = false
-        
-        while (lastReadingPage == null && retryCount < maxProgressRetry) {
-            val progress = textManager.getLastReadPageNumber(uri.toString())
-            if (progress != null) {
-                lastReadingPage = progress
-                hasLoadedProgress = true
-                Log.d("ContentActivity", "成功获取阅读进度：$lastReadingPage")
-            } else {
+        onDispose {
+            loadJob.cancel()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        val lastReadingPageJob = lifecycleScope.launch {
+            // 2. 异步获取阅读进度（优化：减少重试次数，加快失败速度）
+            while (true) {
                 delay(10)
-                retryCount++
+                lastReadingPage = textManager.getLastReadPageNumber(uri.toString())
+                if(lastReadingPage != null || isLoadPagesOver){
+                    break
+                }
+                delay(10)
+            }
+            if (lastReadingPage == null) {
+                // 如果总页数大于 0，则将 lastReadingPage 设置为 0
+                if (totalPages > 0) {
+                    Log.d("ContentActivity", "设置上次阅读进度为 0")
+                    lastReadingPage = 0
+                }
+                else{
+                    Log.d("ContentActivity", "没有阅读进度")
+                }
+            }
+            else{
+                Log.d("ContentActivity", "获得上次阅读进度：${lastReadingPage}")
             }
         }
 
-        if (retryCount >= maxProgressRetry) {
-            Log.w("ContentActivity", "获取阅读进度超时，已尝试 $maxProgressRetry 次")
+        onDispose {
+            lastReadingPageJob.cancel()
         }
-        
-        // 3. 如果没有获取到进度，设置为 0（从第一页开始）
-        if (!hasLoadedProgress) {
-            Log.d("ContentActivity", "没有获取到进度，设置为 0")
-            lastReadingPage = 0
-        }
-        
-        // 标记初始化完成
-        isInitializing = false
     }
+
     // 任务 2：持续更新 totalPages（后台运行）
     DisposableEffect(Unit) {
         val pageCountJob = lifecycleScope.launch {
@@ -359,9 +365,9 @@ fun ContentScreen(
 
     LaunchedEffect(totalPages, lastReadingPage) {
         // 恢复上次阅读位置（如果有）
-        if ((!hasRestoredLastReading) && totalPages > 0 && lastReadingPage != null) {
+        if ((!hasFirstScrolledToLastReading) && totalPages > 0 && lastReadingPage != null) {
             pagerState.scrollToPage(lastReadingPage!!)
-            hasRestoredLastReading = true
+            hasFirstScrolledToLastReading = true
         }
     }
     LaunchedEffect(isPlayDone) {
@@ -546,27 +552,8 @@ fun ContentScreen(
                         }
                     }
                 }
-
-                // 正在初始化
-                isInitializing -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "正在加载内容...",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
                 // 正常显示内容（修改条件：只要 lastReadingPage != null 即可）
-                lastReadingPage != null -> {
+                lastReadingPage != null && totalPages > 0 -> {
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
@@ -602,7 +589,7 @@ fun ContentScreen(
                                 // 从 Application 中获取 booksCache
                                 val app = context.applicationContext as ReadEarApplication
                                 val pagesCache = app.booksCache.getCache(uri.toString())
-                                                                
+
                                 if (pagesCache != null) {
                                     val pageContent = pagesCache.getPage(page)
                                     if (pageContent != null) {
@@ -699,7 +686,7 @@ fun ContentScreen(
                         }
                     }
 
-                    if(!isFullScreen) {
+                    if (!isFullScreen) {
                         // 添加可拖动的播放按钮
                         DraggablePlayButton(
                             modifier = Modifier
@@ -750,9 +737,27 @@ fun ContentScreen(
                     }
                 }
 
+                // 正在初始化
+                !isLoadPagesOver -> {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "正在加载...",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 else -> {
                     Text(
-                        text = "文件夹没有内容",
+                        text = "文件没有内容",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.align(Alignment.Center)
@@ -1087,7 +1092,7 @@ fun DraggablePlayButton(
                                 dragAmount.y.toInt()
                             )
                             // 只有在正在播放时才更新拖动记录和检测摇晃，避免在非播放状态下频繁计算
-                            if(isSpeaking) {
+                            if (isSpeaking) {
                                 val currentTime = System.currentTimeMillis()
                                 updateDragQueue(dragQueue, offset, currentTime)
 
