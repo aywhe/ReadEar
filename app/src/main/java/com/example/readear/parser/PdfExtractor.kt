@@ -43,7 +43,7 @@ class PdfExtractor(private val context: Context) : TextExtractor {
                     // 获取总页数
                     val totalPages = document.numberOfPages
 
-                    // 按页读取文本
+                    // 按页读取文本，pdfbox的PDFTextStripper索引要从1开始
                     for (page in 0..totalPages) {
                         stripper.startPage = page
                         stripper.endPage = page
