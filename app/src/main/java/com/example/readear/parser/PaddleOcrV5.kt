@@ -1,18 +1,21 @@
 package com.example.readear.parser
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
 import com.equationl.ncnnandroidppocr.OCR
+import com.equationl.ncnnandroidppocr.bean.Device
 import com.equationl.ncnnandroidppocr.bean.DrawModel
+import com.equationl.ncnnandroidppocr.bean.ImageSize
 import com.equationl.ncnnandroidppocr.bean.ModelType
 
-class PaddleOcrV5 : OcrEngine{
+class PaddleOcrV5(private val context: Context) : OcrEngine{
     private var isInitialized = false
     private val TAG = "PaddleOcrV5"
     private val ocr = OCR()
     private fun initialize(): Boolean {
         Log.d(TAG, "ocr init")
-        isInitialized = ocr.initModelFromAssert(assets, ModelType.Mobile, ImageSize.Size720, Device.CPU)
+        isInitialized = ocr.initModelFromAssert(context.assets, ModelType.Mobile, ImageSize.Size720, Device.CPU)
         return isInitialized
     }
     override fun recognizeText(bitmap: Bitmap): String? {
@@ -40,10 +43,12 @@ class PaddleOcrV5 : OcrEngine{
     }
 
     override fun reinitialize(): Boolean {
-        release()
+        if (isInitialized) {
+            release()
+        }
         return initialize()
     }
-    override fun hasInitialized(): Boolean {
+    override fun isOcrAvailable(): Boolean {
         return isInitialized
     }
 }

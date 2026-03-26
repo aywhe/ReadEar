@@ -1,5 +1,6 @@
 package com.example.readear.parser
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
@@ -9,7 +10,9 @@ import kotlinx.coroutines.launch
 enum class OCREngineType {
     PaddleOCRV5
 }
-class DocumentScanner(private val ocrEngineType: OCREngineType) {
+class DocumentScanner(
+    private val context: Context,
+    private val ocrEngineType: OCREngineType) {
     private var ocrEngine: OcrEngine? = null
     val scope = CoroutineScope(Dispatchers.IO)
 
@@ -27,7 +30,7 @@ class DocumentScanner(private val ocrEngineType: OCREngineType) {
         }
         when (ocrEngineType) {
             OCREngineType.PaddleOCRV5 -> {
-                ocrEngine = PaddleOcrV5()
+                ocrEngine = PaddleOcrV5(context)
                 if (!ocrEngine!!.reinitialize()) {
                     ocrEngine = null
                     Log.e("OCR", "PaddleOCRV5 initialization failed")
@@ -40,7 +43,7 @@ class DocumentScanner(private val ocrEngineType: OCREngineType) {
     }
 
     fun doOcr(bitmap: Bitmap): String? {
-        if(ocrEngine == null || !ocrEngine!!.hasInitialized()){
+        if(ocrEngine == null || !ocrEngine!!.isOcrAvailable()){
             return null
         }
         return ocrEngine!!.recognizeText(bitmap)

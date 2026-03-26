@@ -10,5 +10,5 @@ interface OcrEngine {
 
     fun reinitialize(): Boolean
 
-    fun hasInitialized(): Boolean
+    fun isOcrAvailable(): Boolean
 }

@@ -1,6 +1,7 @@
 package com.example.readear.parser
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -18,9 +19,9 @@ import kotlinx.coroutines.launch
  */
 class PdfExtractor(private val context: Context) : TextExtractor {
     private val TAG = "PdfExtractor"
-    val pageTextOcrThreld = 30
+    val pageTextOcrThreshold = 30
 
-    private val docScanner = DocumentScanner(OCREngineType.PaddleOCRV5)
+    private val docScanner = DocumentScanner(context, OCREngineType.PaddleOCRV5)
     val scope = CoroutineScope(Dispatchers.IO)
 
     init{
@@ -43,22 +44,28 @@ class PdfExtractor(private val context: Context) : TextExtractor {
                     val totalPages = document.numberOfPages
 
                     // 按页读取文本
-                    for (page in 1..totalPages) {
+                    for (page in 0..totalPages) {
                         stripper.startPage = page
                         stripper.endPage = page
 
                         var text = stripper.getText(document)
 
-                        if (text.length < pageTextOcrThreld) {
+                        if (text.length < pageTextOcrThreshold) {
+                            var bitmap: Bitmap? = null
                             try {
-                                val bitmap = pdfRenderer.renderImage(page - 1)
+                                bitmap = pdfRenderer.renderImage(page)
                                 val ocrText = docScanner.doOcr(bitmap)
-                                bitmap.recycle()
                                 if (ocrText?.isNotBlank() ?: false) {
                                     text = ocrText
                                 }
+                                else{
+                                    // 使用原来提取的文本，不做修改
+                                }
                             } catch (e: Exception) {
                                 e.printStackTrace()
+                            }
+                            finally {
+                                bitmap?.recycle()
                             }
                         }
                         // 发送文本
