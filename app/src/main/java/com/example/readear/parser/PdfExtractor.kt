@@ -53,7 +53,8 @@ class PdfExtractor(private val context: Context) : TextExtractor {
                         if (text.length < pageTextOcrThreshold) {
                             var bitmap: Bitmap? = null
                             try {
-                                bitmap = pdfRenderer.renderImage(page)
+                                // pdfRenderer的索引1-base与PDFTextStripper的索引的0-base不同
+                                bitmap = pdfRenderer.renderImage(page - 1)
                                 val ocrText = docScanner.doOcr(bitmap)
                                 if (ocrText?.isNotBlank() ?: false) {
                                     text = ocrText
