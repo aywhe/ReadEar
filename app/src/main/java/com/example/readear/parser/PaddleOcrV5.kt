@@ -19,21 +19,29 @@ class PaddleOcrV5(private val context: Context) : OcrEngine{
         return isInitialized
     }
     override fun recognizeText(bitmap: Bitmap): String? {
-        var resultText: String? = null
-        val result = ocr.detectBitmap(bitmap, drawModel = DrawModel.None)  // drawModel = DrawModel.Full 表示要将识别结果绘制在 Bitmap 上返回，使用时建议设置为 DrawModel.None
-        if (result != null) {
+        if (!isInitialized || bitmap.isRecycled) {
+            Log.e(TAG, "OCR 引擎未初始化或图片已回收")
+            return null
+        }
+        
+        val result = ocr.detectBitmap(bitmap, drawModel = DrawModel.None)
+        if (result != null && result.text.isNotEmpty()) {
             val simpleText = result.text
             val inferenceTime = result.inferenceTime
             val outputRawResult = result.textLines
 
-            //Log.d(TAG, "识别文字=${simpleText} 识别时间=${inferenceTime} ms")
-            resultText = ""
-            outputRawResult.forEachIndexed { index, ocrResultModel ->
-                resultText += "${ocrResultModel.text}\n"
-                //Log.d(TAG,"$index: 文字：${ocrResultModel.text}，文字方向：${ocrResultModel.orientation}；置信度：${ocrResultModel.confidence}；文字位置：${ocrResultModel.points}")
+            Log.d(TAG, "识别文字=$simpleText 识别时间=$inferenceTime ms")
+            
+            val stringBuilder = StringBuilder()
+            outputRawResult.forEach { ocrResultModel ->
+                stringBuilder.append(ocrResultModel.text).append("\n")
             }
+            
+            return stringBuilder.toString()
         }
-        return resultText
+        
+        Log.w(TAG, "未识别到文本")
+        return null
     }
 
     override fun release() {

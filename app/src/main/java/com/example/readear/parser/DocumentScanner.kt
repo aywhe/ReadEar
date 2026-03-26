@@ -8,7 +8,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 enum class OCREngineType {
-    PaddleOCRV5
+    PaddleOCRV5,
+    ML_KIT  // 新增 Google ML Kit 引擎
 }
 class DocumentScanner(
     private val context: Context,
@@ -37,6 +38,16 @@ class DocumentScanner(
                 }
                 else {
                     Log.d("OCR", "PaddleOCRV5 initialized")
+                }
+            }
+            OCREngineType.ML_KIT -> {
+                ocrEngine = MlKitOcr(context)
+                if (!ocrEngine!!.reinitialize()) {
+                    ocrEngine = null
+                    Log.e("OCR", "ML Kit initialization failed")
+                }
+                else {
+                    Log.d("OCR", "ML Kit initialized")
                 }
             }
         }

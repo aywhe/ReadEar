@@ -21,7 +21,7 @@ class PdfExtractor(private val context: Context) : TextExtractor {
     private val TAG = "PdfExtractor"
     val pageTextOcrThreshold = 30
 
-    private val docScanner = DocumentScanner(context, OCREngineType.PaddleOCRV5)
+    private val docScanner = DocumentScanner(context, OCREngineType.ML_KIT)
     val scope = CoroutineScope(Dispatchers.IO)
 
     override fun extractTextRaw(uri: Uri): Flow<String> = flow {
@@ -48,7 +48,7 @@ class PdfExtractor(private val context: Context) : TextExtractor {
 
                         var text = stripper.getText(document)
 
-                        if (text.length < pageTextOcrThreshold) {
+                        if (text.isBlank() || text.length < pageTextOcrThreshold) {
                             var bitmap: Bitmap? = null
                             try {
                                 // pdfRenderer的索引1-base与PDFTextStripper的索引的0-base不同
