@@ -1,6 +1,7 @@
 package com.example.readear.speech
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -8,7 +9,6 @@ import kotlinx.coroutines.flow.StateFlow
  */
 enum class TTSEngineType {
     DEFAULT,  // 系统默认 TTS
-    CUSTOM    // 自定义 TTS 引擎（预留扩展）
 }
 
 /**
@@ -29,7 +29,7 @@ enum class TTSEngineType {
  * - Context 通过构造函数注入，避免内存泄漏
  */
 class UserTextToSpeech(
-    context: Context,
+    private val context: Context,
     private val engineType: TTSEngineType = TTSEngineType.DEFAULT
 ) {
     
@@ -37,13 +37,14 @@ class UserTextToSpeech(
     private var textToSpeechEngine: TextToSpeechEngine? = null
     
     init {
-        textToSpeechEngine = when (engineType) {
-            TTSEngineType.DEFAULT -> DefaultTextToSpeech(context)
-            TTSEngineType.CUSTOM -> {
-                // 预留自定义 TTS 引擎的扩展点
-                // 未来可以在这里集成第三方 TTS（如讯飞、百度等）
-                // 还没有新的其他 TTS，输出错误
-                throw IllegalArgumentException("暂不支持的 TTS 引擎")
+        initialize()
+    }
+
+    private fun initialize() {
+        when (engineType) {
+            TTSEngineType.DEFAULT -> {
+                textToSpeechEngine = DefaultTextToSpeech(context)
+                Log.d("UserTextToSpeech", "Using default TTS engine")
             }
         }
     }
@@ -112,13 +113,7 @@ class UserTextToSpeech(
             // 释放当前引擎资源
             release()
             
-            // 重新创建新类型的引擎
-            textToSpeechEngine = when (newType) {
-                TTSEngineType.DEFAULT -> DefaultTextToSpeech(context)
-                TTSEngineType.CUSTOM -> {
-                    throw IllegalArgumentException("暂不支持的 TTS 引擎")
-                }
-            }
+            initialize()
             
             return true
         } catch (e: Exception) {

@@ -26,6 +26,7 @@ android {
         
         // ⭐ 添加版本信息到清单文件，供代码读取
         manifestPlaceholders["versionName"] = versionName.toString()
+        
     }
 
     buildTypes {
@@ -85,6 +86,14 @@ dependencies {
     //implementation("org.apache.pdfbox:pdfbox:2.0.32")
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
+    // ⭐ OCR 识别
+    //implementation("com.google.mlkit:text-recognition:16.0.1")        // 拉丁文
+    //implementation("com.google.mlkit:text-recognition-chinese:16.0.1") // 中文
+    //百度 Paddle Lite OCR
+    //implementation("com.baidu.paddle.lite:paddle-lite:2.14")
+    implementation("com.github.equationl.paddleocr4android:ncnnandroidppocr:v1.3.0")
+
+    // reorder column
     //implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
     implementation("sh.calvin.reorderable:reorderable:3.0.0")
 
