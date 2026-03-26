@@ -687,6 +687,9 @@ fun FileListScreen(
                 if (minutes > 0) {
                     context.startTimer(minutes)
                 }
+                else {
+                    context.stopTimer()
+                }
                 showTimerDialog = false
             },
             onStopTimer = {
