@@ -1,3 +1,9 @@
+- 断点继续解析的功能，需要数据库存储最新的数据对应源文件的页码，然后一层层从TextManager->TextLoader->TextExtractor传参，
+这样做以后，发现还需要 TextChunk 的 index 和 Page 中的 pageNumber 与源文件的页码对应
+所以需要两个类都添加新的成员 originPosition, 同样数据库两个表也都要新增一列
+考虑到，不用扫描版pdf的时候，解析速度还是很快的，断点继续解析的功能似乎没有用处
+而在扫描版pdf中使用ocr识别文字，速度很慢，就很需要这个功能了，但是ocr的效果很不好，错字，漏字情况严重，似乎不需要继续开发
+所以断点继续解析的功能在主分支不需要，ocr分支后续看情况是否继续开发时再添加
 - PDFTextStripper的页码索引是从1开始的！！！
 - MainActivity 中的 FileScreen 中实现文件列表拖动的功能时，使用了 org.burnoutcrew.composereorderable:reorderable:0.9.6
 出现的问题是，拖动第0个文件时，列表会非常快的滚动，导致一下子跳过好多个文件，原因可能是对第0个文件的卡片坐标计算有问题
