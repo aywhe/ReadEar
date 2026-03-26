@@ -189,22 +189,22 @@ class TextManager(
      */
     suspend fun startLoadPages(uri: Uri, avgCharsPerLine: Int, maxLinesPerPage: Int) {
         val uriString = uri.toString()
-        
+        Log.d(TAG, "开始加载页面：$uriString")
         try {
             val memoryCache = booksCache.getCache(uriString)
             if (memoryCache?.isCompleted() == true) {
-                Log.d(TAG, "内存缓存已完整，直接返回：$uriString")
+                Log.d(TAG, "内存缓存已完整，直接返回")
                 onLoadingStateChanged?.invoke(uriString, TextLoadingState.COMPLETED)
                 return
             }
-            
+            Log.d(TAG, "数据库缓存不完整，启动后台提取任务")
             val book = try {
                 cacheManager.getBook(uriString)
             } catch (e: Exception) {
-                Log.e(TAG, "获取书籍信息失败：${e.message}", e)
+                Log.e(TAG, "获取书籍信息异常：${e.message}", e)
                 null
             }
-
+            Log.d(TAG, "书籍信息：$book")
             if(book != null) {
                 Log.d(TAG, "数据库缓存加载到内存：$uriString")
                 cacheCoordinator.loadAllPagesToMemory(uriString)
@@ -255,14 +255,14 @@ class TextManager(
                     ) {
                         cacheCoordinator.savePage(uriString, page)
                     }
-                    
-                    pageCount++
+
                     lastPageIndex = textChunk.index
                     totalWords += textChunk.content.length
                     
                     if (pageCount % 100 == 0 || textChunk.isCompleted) {
                         cacheCoordinator.saveBookInfo(uriString, totalWords, lastPageIndex + 1)
                     }
+                    pageCount++
                     
                     if (textChunk.isCompleted) {
                         cacheCoordinator.markCacheAsCompleted(uriString, totalWords, lastPageIndex + 1)

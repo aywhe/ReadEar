@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import org.apache.poi.xwpf.usermodel.XWPFDocument
+import org.apache.poi.xwpf.usermodel.XWPFParagraph
+import org.apache.poi.xwpf.usermodel.XWPFTable
 
 /**
  * Word 文件文本提取器
@@ -21,29 +23,45 @@ class WordExtractor(private val context: Context) : TextExtractor {
         try {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 XWPFDocument(inputStream).use { document ->
-                    // 1. 提取段落文本
-                    document.paragraphs.forEach { paragraph ->
-                        val text = paragraph.text
-                        if (text.isNotBlank()) {
-                            emit(text)
-                        }
-                    }
+                    // 按文档顺序获取所有 body 元素（段落和表格）
+                    val bodyElements = document.bodyElements
 
-                    // 2. 提取表格中的文本
-                    document.tables.forEach { table ->
-                        table.rows.forEach { row ->
-                            // 修复：使用 getTableCells() 方法而不是 cells 属性
-                            row.tableCells.forEach { cell ->
-                                cell.paragraphs.forEach { paragraph ->
-                                    val text = paragraph.text
-                                    if (text.isNotBlank()) {
-                                        emit(text)
+                    val totalElements = bodyElements.size
+                    
+                    for (index in 0 until totalElements) {
+                        val element = bodyElements[index]
+                        val isLastElement = index == totalElements - 1
+                        
+                        when (element) {
+                            is XWPFParagraph -> {
+                                val text = element.text
+                                if (text.isNotBlank()) {
+                                    emit(text)
+                                }
+                            }
+                            is XWPFTable -> {
+                                // 提取表格中的文本，按行遍历
+                                val rows = element.rows
+                                for (rowIndex in 0 until rows.size) {
+                                    val row = rows[rowIndex]
+                                    val cells = row.tableCells
+                                    val rowText = buildString {
+                                        for (cellIndex in 0 until cells.size) {
+                                            val cell = cells[cellIndex]
+                                            append(cell.text.trim())
+                                            if (cellIndex < cells.size - 1) {
+                                                append("\t") // 单元格之间用制表符分隔
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (rowText.isNotBlank()) {
+                                        emit(rowText)
                                     }
                                 }
                             }
                         }
                     }
-
                     // 3. 提取页眉页脚（可选）
 //                    document.headerList.forEach { header ->
 //                        header.paragraphs.forEach { paragraph ->

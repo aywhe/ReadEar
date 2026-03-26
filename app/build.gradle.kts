@@ -17,7 +17,7 @@ android {
         minSdk = 26  // ⭐ 从 24 提升到 26
         targetSdk = 36
         versionCode = 4  // 每次发布递增
-        versionName = "1.3.1"  // 语义化版本号
+        versionName = "1.3.2"  // 语义化版本号
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
