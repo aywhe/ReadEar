@@ -24,15 +24,13 @@ class PdfExtractor(private val context: Context) : TextExtractor {
     private val docScanner = DocumentScanner(context, OCREngineType.PaddleOCRV5)
     val scope = CoroutineScope(Dispatchers.IO)
 
-    init{
-        // 后台运行初始化
-        scope.launch(Dispatchers.IO) {
-            docScanner.reInitialize()
-        }
-    }
     override fun extractTextRaw(uri: Uri): Flow<String> = flow {
         if (!PDFBoxResourceLoader.isReady()) {
             PDFBoxResourceLoader.init(context)
+        }
+        // 后台运行初始化
+        scope.launch(Dispatchers.IO) {
+            docScanner.reInitialize()
         }
         try {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
@@ -77,6 +75,9 @@ class PdfExtractor(private val context: Context) : TextExtractor {
         } catch (e: Exception) {
             e.printStackTrace()
             throw e
+        }
+        finally {
+            docScanner.release()
         }
     }.flowOn(Dispatchers.IO)
 }
