@@ -29,7 +29,7 @@ enum class TTSEngineType {
  * - Context 通过构造函数注入，避免内存泄漏
  */
 class UserTextToSpeech(
-    context: Context,
+    private val context: Context,
     private val engineType: TTSEngineType = TTSEngineType.DEFAULT
 ) {
     
@@ -37,6 +37,9 @@ class UserTextToSpeech(
     private var textToSpeechEngine: TextToSpeechEngine? = null
     
     init {
+        initialize()
+    }
+    private fun initialize() {
         textToSpeechEngine = when (engineType) {
             TTSEngineType.DEFAULT -> DefaultTextToSpeech(context)
             TTSEngineType.CUSTOM -> {
@@ -113,12 +116,7 @@ class UserTextToSpeech(
             release()
             
             // 重新创建新类型的引擎
-            textToSpeechEngine = when (newType) {
-                TTSEngineType.DEFAULT -> DefaultTextToSpeech(context)
-                TTSEngineType.CUSTOM -> {
-                    throw IllegalArgumentException("暂不支持的 TTS 引擎")
-                }
-            }
+            initialize()
             
             return true
         } catch (e: Exception) {

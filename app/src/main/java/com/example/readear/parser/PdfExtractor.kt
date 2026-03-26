@@ -34,12 +34,7 @@ class PdfExtractor(private val context: Context) : TextExtractor {
 
                         val text = stripper.getText(document)
 
-                        // 将每页文本按行分割并发出
-                        text.lines().forEach { line ->
-                            if (line.isNotBlank()) {
-                                emit(line)
-                            }
-                        }
+                        emit(text)
                     }
                 }
             }
