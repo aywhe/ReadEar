@@ -1,3 +1,4 @@
+- PDFTextStripper的页码索引是从1开始的！！！
 - MainActivity 中的 FileScreen 中实现文件列表拖动的功能时，使用了 org.burnoutcrew.composereorderable:reorderable:0.9.6
 出现的问题是，拖动第0个文件时，列表会非常快的滚动，导致一下子跳过好多个文件，原因可能是对第0个文件的卡片坐标计算有问题
 解决办法： 放弃了 org.burnoutcrew.composereorderable:reorderable:0.9.6， 改用 sh.calvin.reorderable:reorderable:3.0.0
