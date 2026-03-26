@@ -24,7 +24,7 @@ class PdfExtractor(private val context: Context) : TextExtractor {
     private val docScanner = DocumentScanner(context, OCREngineType.ML_KIT)
     val scope = CoroutineScope(Dispatchers.IO)
 
-    override fun extractTextRaw(uri: Uri): Flow<String> = flow {
+    override fun extractTextRaw(uri: Uri, startPosition: Int): Flow<TextExtractionBlock> = flow {
         if (!PDFBoxResourceLoader.isReady()) {
             PDFBoxResourceLoader.init(context)
         }
@@ -42,7 +42,7 @@ class PdfExtractor(private val context: Context) : TextExtractor {
                     val totalPages = document.numberOfPages
 
                     // 按页读取文本，pdfbox的PDFTextStripper索引要从1开始
-                    for (page in 1..totalPages) {
+                    for (page in startPosition + 1..totalPages) {
                         stripper.startPage = page
                         stripper.endPage = page
 
@@ -68,7 +68,11 @@ class PdfExtractor(private val context: Context) : TextExtractor {
                             }
                         }
                         // 发送文本
-                        emit(text)
+                        emit(TextExtractionBlock(
+                            text,
+                            page == totalPages,
+                            page - 1
+                        ))
                     }
                 }
             }

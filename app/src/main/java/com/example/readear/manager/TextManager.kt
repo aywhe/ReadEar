@@ -255,15 +255,15 @@ class TextManager(
                     ) {
                         cacheCoordinator.savePage(uriString, page)
                     }
-                    
-                    pageCount++
+
                     lastPageIndex = textChunk.index
                     totalWords += textChunk.content.length
                     
                     if (pageCount % 100 == 0 || textChunk.isCompleted) {
                         cacheCoordinator.saveBookInfo(uriString, totalWords, lastPageIndex + 1)
                     }
-                    
+                    pageCount++
+
                     if (textChunk.isCompleted) {
                         cacheCoordinator.markCacheAsCompleted(uriString, totalWords, lastPageIndex + 1)
                         Log.i(TAG, "文本提取完成：$uriString, 总页数：${lastPageIndex + 1}, 总字数：$totalWords")

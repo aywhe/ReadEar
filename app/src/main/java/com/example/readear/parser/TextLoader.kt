@@ -2,7 +2,6 @@ package com.example.readear.parser
 
 import android.content.Context
 import android.net.Uri
-import com.example.readear.FileType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -30,30 +29,33 @@ class TextLoader(
      */
     suspend fun extractAndPaginate(
         uri: Uri,
+        startPos: Int,
+        startIndex: Int,
         avgCharsPerLine: Int,
         maxLinesPerPage: Int
     ): Flow<TextChunk> = withContext(Dispatchers.IO) {
         val textExtractorFactory = TextExtractorFactory(context)
         val extractor = textExtractorFactory.getExtractor(uri)
-        val rawTextFlow = extractor.extractTextRaw(uri)
-        paginateText(rawTextFlow, avgCharsPerLine, maxLinesPerPage)
+        val rawTextFlow = extractor.extractTextRaw(uri,startPos)
+        paginateText(rawTextFlow, startIndex, avgCharsPerLine, maxLinesPerPage)
     }
     
     /**
      * 将连续的文本流分割成适合显示的页面
      */
     private suspend fun paginateText(
-        textFlow: Flow<String>,
+        textFlow: Flow<TextExtractionBlock>,
+        startIndex: Int,
         avgCharsPerLine: Int,
         maxLinesPerPage: Int
     ): Flow<TextChunk> = flow {
-        val paginator = TextPaginator(avgCharsPerLine, maxLinesPerPage) { chunk ->
+        val paginator = TextPaginator(avgCharsPerLine, maxLinesPerPage, startIndex) { chunk ->
             emit(chunk)
         }
         
-        textFlow.collect { text ->
-            text.lines().forEach { line ->
-                paginator.processLine(line)
+        textFlow.collect { result ->
+            result.content.lines().forEach { line ->
+                paginator.processLine(line, result.isCompleted)
             }
         }
         
@@ -68,13 +70,17 @@ class TextLoader(
 private class TextPaginator(
     private val avgCharsPerLine: Int,
     private val maxLinesPerPage: Int,
+    private val startIndex: Int,
     private val emitCallback: suspend (TextChunk) -> Unit
 ) {
-    private var index = 0
+    private var index = startIndex
     private var currentContent = StringBuilder()
     private var currentLines = 0
+
+    private var isInLastBlock = false
     
-    suspend fun processLine(line: String) {
+    suspend fun processLine(line: String, isInLastBlock: Boolean) {
+        this.isInLastBlock = isInLastBlock
         val linesNeeded = calculateLinesNeeded(line)
         
         when {
@@ -102,7 +108,7 @@ private class TextPaginator(
             emitCallback(
                 TextChunk(
                     content = currentContent.toString(),
-                    isCompleted = true,
+                    isCompleted = isInLastBlock,
                     index = getCurrentIndex()
                 )
             )

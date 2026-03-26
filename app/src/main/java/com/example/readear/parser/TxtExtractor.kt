@@ -18,7 +18,7 @@ import java.io.SequenceInputStream
  */
 class TxtExtractor(private val context: Context) : TextExtractor {
     
-    override fun extractTextRaw(uri: Uri): Flow<String> = flow {
+    override fun extractTextRaw(uri: Uri, startPosition: Int): Flow<TextExtractionBlock> = flow {
         try {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 // 检测文件编码
@@ -31,10 +31,29 @@ class TxtExtractor(private val context: Context) : TextExtractor {
                 
                 BufferedReader(InputStreamReader(combinedStream, detectedCharset)).use { reader ->
                     var line: String?
+                    var position = 0
+                    var nextLine: String? = reader.readLine() // 预读一行
                     
-                    while (reader.readLine().also { line = it } != null) {
-                        // 直接发出原始文本行
-                        emit(line!!)
+                    while (nextLine != null) {
+                        line = nextLine
+                        nextLine = reader.readLine() // 读取下一行
+                        
+                        // 如果没有下一行了，说明这是文件的最后一行
+                        val isFileLastLine = nextLine == null
+                        
+                        if(position >= startPosition) {
+                            // 只有在 startPos 之后的最后一行才标记为完成
+                            val isCompleted = isFileLastLine
+                            
+                            emit(
+                                TextExtractionBlock(
+                                    content = line,
+                                    isCompleted = isCompleted,
+                                    position = position
+                                )
+                            )
+                        }
+                        position++
                     }
                 }
             }

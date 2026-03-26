@@ -13,7 +13,7 @@ interface TextExtractor {
      * @param uri 文件 URI
      * @return 返回原始文本的 Flow（按行或按段）
      */
-    fun extractTextRaw(uri: Uri): Flow<String>
+    fun extractTextRaw(uri: Uri, startPosition: Int): Flow<TextExtractionBlock>
 }
 
 /**
@@ -26,4 +26,10 @@ data class TextChunk(
     val content: String,
     val isCompleted: Boolean = false,
     val index: Int = 0
+)
+
+data class TextExtractionBlock(
+    val content: String,
+    val isCompleted: Boolean = false,
+    val position: Int
 )
