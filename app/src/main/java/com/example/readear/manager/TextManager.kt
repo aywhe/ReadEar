@@ -197,7 +197,7 @@ class TextManager(
                 onLoadingStateChanged?.invoke(uriString, TextLoadingState.COMPLETED)
                 return
             }
-            Log.d(TAG, "数据库缓存不完整，启动后台提取任务")
+            Log.d(TAG, "内存不完整，启动后台提取任务")
             val book = try {
                 cacheManager.getBook(uriString)
             } catch (e: Exception) {
@@ -206,15 +206,17 @@ class TextManager(
             }
             Log.d(TAG, "书籍信息：$book")
             if(book != null) {
-                Log.d(TAG, "数据库缓存加载到内存：$uriString")
+                Log.d(TAG, "将数据库加载到内存")
                 cacheCoordinator.loadAllPagesToMemory(uriString)
             }
             if (book?.isCompleted == true) {
+                Log.d(TAG, "内存已完整，直接返回")
                 onLoadingStateChanged?.invoke(uriString, TextLoadingState.COMPLETED)
             } else {
-                Log.d(TAG, "启动后台提取任务：$uriString")
+                Log.d(TAG, "数据不完整，启动后台提取文件任务：$uriString")
                 onLoadingStateChanged?.invoke(uriString, TextLoadingState.LOADING)
                 extractTextFromFileAndSaveCache(uri, avgCharsPerLine, maxLinesPerPage)
+                Log.d(TAG, "后台提取任务结束")
             }
         } catch (e: Exception) {
             Log.e(TAG, "同步加载页面失败：${e.message}", e)
