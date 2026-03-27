@@ -98,9 +98,13 @@ private class TextPaginator(
     }
     
     suspend fun flushRemaining() {
+        var text = currentContent.toString()
+        if (text.isEmpty()) {
+            text = "\n"
+        }
         emitCallback(
             TextChunk(
-                content = currentContent.append("\n").toString(),
+                content = text,
                 isCompleted = true,
                 index = getCurrentIndex()
             )
