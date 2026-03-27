@@ -21,6 +21,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
@@ -497,7 +498,7 @@ fun ContentScreen(
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
                             Icon(
-                                imageVector = Icons.Default.ArrowBack,
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "返回"
                             )
                         }
@@ -564,7 +565,7 @@ fun ContentScreen(
                         }
 
                         // 为每个页面创建独立的高亮状态
-                        val isHightLight = remember(page) {
+                        val isHeightLight = remember(page) {
                             mutableStateOf(false)
                         }
 
@@ -572,7 +573,7 @@ fun ContentScreen(
                         LaunchedEffect(page, showSearchWindow, query) {
                             // 只有满足条件时才检查高亮
                             if (!showSearchWindow || query.isNullOrEmpty() || !query.isNotBlank()) {
-                                isHightLight.value = false
+                                isHeightLight.value = false
                                 return@LaunchedEffect
                             }
 
@@ -582,7 +583,7 @@ fun ContentScreen(
 
                             // 当结果不为 null 时直接使用，为 null 时需要实时检查页面内容
                             if (currentMatch != null) {
-                                isHightLight.value = currentMatch
+                                isHeightLight.value = currentMatch
                             } else {
                                 // SearchResults 中没有记录，需要实时检查 BooksCache 中的页面内容
                                 // 从 Application 中获取 booksCache
@@ -594,7 +595,7 @@ fun ContentScreen(
                                     if (pageContent != null) {
                                         val containsText =
                                             pageContent.content.contains(query, ignoreCase = true)
-                                        isHightLight.value = containsText
+                                        isHeightLight.value = containsText
 
                                         // 同时更新 SearchResults，避免下次重复检查
                                         updateSearchResults(
@@ -605,10 +606,10 @@ fun ContentScreen(
                                             pagesCache.totalPages
                                         )
                                     } else {
-                                        isHightLight.value = false
+                                        isHeightLight.value = false
                                     }
                                 } else {
-                                    isHightLight.value = false
+                                    isHeightLight.value = false
                                 }
                             }
                         }
@@ -626,7 +627,7 @@ fun ContentScreen(
                             }.collect { matchResult ->
                                 // 只有当结果明确时才更新
                                 if (matchResult != null) {
-                                    isHightLight.value = matchResult
+                                    isHeightLight.value = matchResult
                                 }
                             }
                         }
@@ -669,7 +670,7 @@ fun ContentScreen(
                             // 显示内容（确保不为 null）
                             PageContent(
                                 chunk = displayChunk,
-                                isHightLight = isHightLight.value,
+                                isHeightLight = isHeightLight.value,
                                 query = if (showSearchWindow && query.isNotBlank()) query else "",
                                 pageCharsLayoutParameters = pageLayoutParams,
                                 onDoubleTap = {
@@ -809,7 +810,7 @@ fun ContentScreen(
 fun PageContent(
     chunk: TextChunk,
     query: String = "",
-    isHightLight: Boolean = false,
+    isHeightLight: Boolean = false,
     pageCharsLayoutParameters: PageCharsLayoutParameters,
     onDoubleTap: () -> Unit,
     onLongPress: (String) -> Unit
@@ -818,7 +819,7 @@ fun PageContent(
     // 获取搜索关键词（从 SearchResults 中获取当前 URI 的查询）
     // 注意：这里需要传递 query 参数才能高亮，我们稍后修改
     // 构建带高亮的文本
-    val annotatedText = if (query.isNotBlank() && isHightLight) {
+    val annotatedText = if (query.isNotBlank() && isHeightLight) {
         buildAnnotatedString {
             val content = chunk.content
             append(content)
@@ -1114,7 +1115,7 @@ fun DraggablePlayButton(
     var isShaking by remember { mutableStateOf(false) }
     // 在 DraggablePlayButton 中添加缓存状态
     var shakeCheckResult by remember { mutableStateOf(false) }
-    var lastShakeCheckTime by remember { mutableStateOf(0L) }
+    var lastShakeCheckTime by remember { mutableLongStateOf(0L) }
     val lifecycleScope = rememberCoroutineScope()
     // 检测到摇晃后，设置 isOnShake 为 true，并在 1 秒后重置为 false，避免连续触发
     LaunchedEffect(isShaking) {
