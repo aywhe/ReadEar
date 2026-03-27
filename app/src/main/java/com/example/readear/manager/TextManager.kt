@@ -201,10 +201,11 @@ class TextManager(
             val book = try {
                 cacheManager.getBook(uriString)
             } catch (e: Exception) {
-                Log.e(TAG, "获取书籍信息异常：${e.message}", e)
+                Log.e(TAG, "获取数据库书籍信息异常：${e.message}", e)
                 null
             }
             if(book != null) {
+                Log.d(TAG, "数据库中书籍信息：$book")
                 Log.d(TAG, "将数据库加载到内存")
                 cacheCoordinator.loadAllPagesToMemory(uriString)
             }
@@ -217,7 +218,6 @@ class TextManager(
                 extractTextFromFileAndSaveCache(uri, avgCharsPerLine, maxLinesPerPage)
                 Log.d(TAG, "后台提取任务结束")
             }
-            Log.d(TAG, "书籍信息：$book")
         } catch (e: Exception) {
             Log.e(TAG, "同步加载页面失败：${e.message}", e)
             onLoadingStateChanged?.invoke(uriString, TextLoadingState.ERROR)
