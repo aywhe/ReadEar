@@ -98,15 +98,13 @@ private class TextPaginator(
     }
     
     suspend fun flushRemaining() {
-        if (currentContent.isNotEmpty()) {
-            emitCallback(
-                TextChunk(
-                    content = currentContent.toString(),
-                    isCompleted = true,
-                    index = getCurrentIndex()
-                )
+        emitCallback(
+            TextChunk(
+                content = currentContent.append("\n").toString(),
+                isCompleted = true,
+                index = getCurrentIndex()
             )
-        }
+        )
     }
     
     private fun calculateLinesNeeded(line: String): Int {
