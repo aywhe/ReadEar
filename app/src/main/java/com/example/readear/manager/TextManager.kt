@@ -275,6 +275,11 @@ class TextManager(
                     Log.e(TAG, "保存页面失败：${textChunk.index}, ${e.message}", e)
                 }
             }
+            // 这样设计不好，用户应该可以继续尝试启动提取任务
+//            if(pageCount == 0){
+//                Log.w(TAG, "文本没有内容，设置内存数据为完成状态, 本次应用周期不会再尝试启动提取任务")
+//                booksCache.getCache(uriString)?.setCompleted(true)
+//            }
         } catch (e: Exception) {
             Log.e(TAG, "提取文本失败：${e.message}", e)
             onLoadingStateChanged?.invoke(uriString, TextLoadingState.ERROR)
