@@ -273,7 +273,10 @@ fun ContentScreen(
         // 1. 在后台启动协程执行 startLoadPages，不阻塞当前协程
         val loadJob = lifecycleScope.launch(Dispatchers.IO) {
             try {
-                Log.i("ContentActivity", "avgCharsPerLine: ${pageLayoutParams.avgCharsPerLine}, maxLinesPerPage: ${pageLayoutParams.maxLinesPerPage}")
+                Log.i(
+                    "ContentActivity",
+                    "avgCharsPerLine: ${pageLayoutParams.avgCharsPerLine}, maxLinesPerPage: ${pageLayoutParams.maxLinesPerPage}"
+                )
                 isLoadPagesOver = false
                 textManager.startLoadPages(
                     uri,
@@ -283,7 +286,7 @@ fun ContentScreen(
                 Log.d("ContentActivity", "加载数据结束")
             } catch (e: Exception) {
                 errorMessage = "加载数据错误：${e.message}"
-            }finally {
+            } finally {
                 isLoadPagesOver = true
             }
         }
@@ -298,7 +301,7 @@ fun ContentScreen(
             while (true) {
                 delay(10)
                 lastReadingPage = textManager.getLastReadPageNumber(uri.toString())
-                if(lastReadingPage != null || isLoadPagesOver){
+                if (lastReadingPage != null || isLoadPagesOver) {
                     break
                 }
                 delay(10)
@@ -308,12 +311,10 @@ fun ContentScreen(
                 if (totalPages > 0) {
                     Log.d("ContentActivity", "设置上次阅读进度为 0")
                     lastReadingPage = 0
-                }
-                else{
+                } else {
                     Log.d("ContentActivity", "没有阅读进度")
                 }
-            }
-            else{
+            } else {
                 Log.d("ContentActivity", "获得上次阅读进度：${lastReadingPage}")
             }
         }
@@ -686,56 +687,54 @@ fun ContentScreen(
                             )
                         }
                     }
-
-                    if (!isFullScreen) {
-                        // 添加可拖动的播放按钮
-                        DraggablePlayButton(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(16.dp),
-                            isSpeaking = isSpeaking,
-                            onClick = {
-                                lifecycleScope.launch {
-                                    val currentPageContent =
-                                        textManager.getPage(uri.toString(), pagerState.currentPage)
-                                    if (currentPageContent != null) {
-                                        // 更新当前播放页面为当前显示的页面
-                                        currentSpeakingPage = pagerState.currentPage
-                                        onPlayText(currentPageContent.content)
-                                    } else {
-                                        Toast.makeText(
-                                            context,
-                                            "当前页面内容为空",
-                                            Toast.LENGTH_SHORT
-                                        )
-                                            .show()
-                                    }
-                                }
-                            },
-                            onStop = { onStopSpeaking() },
-                            onShake = {
-                                Log.d(
-                                    "DraggablePlayButton",
-                                    "检测到按钮晃动，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}"
-                                )
-                                if (isSpeaking && currentSpeakingPage != pagerState.currentPage) {
-                                    lifecycleScope.launch {
-                                        Log.d(
-                                            "DraggablePlayButton",
-                                            "按钮晃动后跳转到当前播放页面：${pagerState.currentPage} -> $currentSpeakingPage"
-                                        )
-                                        pagerState.scrollToPage(currentSpeakingPage)
-                                        Toast.makeText(
-                                            context,
-                                            "已跳转到当前播放页面",
-                                            Toast.LENGTH_SHORT
-                                        )
-                                            .show()
-                                    }
+                    // 添加可拖动的播放按钮
+                    DraggablePlayButton(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp),
+                        isFullScreen = isFullScreen,
+                        isSpeaking = isSpeaking,
+                        onClick = {
+                            lifecycleScope.launch {
+                                val currentPageContent =
+                                    textManager.getPage(uri.toString(), pagerState.currentPage)
+                                if (currentPageContent != null) {
+                                    // 更新当前播放页面为当前显示的页面
+                                    currentSpeakingPage = pagerState.currentPage
+                                    onPlayText(currentPageContent.content)
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "当前页面内容为空",
+                                        Toast.LENGTH_SHORT
+                                    )
+                                        .show()
                                 }
                             }
-                        )
-                    }
+                        },
+                        onStop = { onStopSpeaking() },
+                        onShake = {
+                            Log.d(
+                                "DraggablePlayButton",
+                                "检测到按钮晃动，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}"
+                            )
+                            if (isSpeaking && currentSpeakingPage != pagerState.currentPage) {
+                                lifecycleScope.launch {
+                                    Log.d(
+                                        "DraggablePlayButton",
+                                        "按钮晃动后跳转到当前播放页面：${pagerState.currentPage} -> $currentSpeakingPage"
+                                    )
+                                    pagerState.scrollToPage(currentSpeakingPage)
+                                    Toast.makeText(
+                                        context,
+                                        "已跳转到当前播放页面",
+                                        Toast.LENGTH_SHORT
+                                    )
+                                        .show()
+                                }
+                            }
+                        }
+                    )
                 }
 
                 // 正在初始化
@@ -921,6 +920,7 @@ class PageCharsLayoutParameters(private val context: Context) {
     var topAppBarHeightDp = 64f     // Material 3 TopAppBar 标准高度
     var statusBarHeightDp = 24f      // 状态栏经验值
     var navigationBarHeightDp = 48f
+
     /**
      * 初始化参数
      * 根据屏幕尺寸和密度计算文本渲染和分页所需的字符参数
@@ -950,8 +950,10 @@ class PageCharsLayoutParameters(private val context: Context) {
         val effectiveCharWidth = fontSizePx * charAspectRatio * charSpacingFactor
 
         // 使用 paddingValues 计算内容区域的边距
-        val leftPaddingPx = paddingValues.calculateLeftPadding(layoutDirection = androidx.compose.ui.unit.LayoutDirection.Ltr).value * density
-        val rightPaddingPx = paddingValues.calculateRightPadding(layoutDirection = androidx.compose.ui.unit.LayoutDirection.Ltr).value * density
+        val leftPaddingPx =
+            paddingValues.calculateLeftPadding(layoutDirection = androidx.compose.ui.unit.LayoutDirection.Ltr).value * density
+        val rightPaddingPx =
+            paddingValues.calculateRightPadding(layoutDirection = androidx.compose.ui.unit.LayoutDirection.Ltr).value * density
         val topPaddingPx = paddingValues.calculateTopPadding().value * density
         val bottomPaddingPx = paddingValues.calculateBottomPadding().value * density
 
@@ -969,7 +971,10 @@ class PageCharsLayoutParameters(private val context: Context) {
         // 2. 计算每页最大行数（像素相除，结果无单位）
         maxLinesPerPage = (availableHeight / scaledLineHeightPx).toInt().coerceIn(10, 35)
 
-        Log.i("ContentActivity", "PageCharsLayoutParameters: fontSizeSp=$fontSizeSp, topBar=${topAppBarHeightDp}dp, status=${statusBarHeightDp}dp, nav=${navigationBarHeightDp}dp, contentPadding(top=${paddingValues.calculateTopPadding()}, bottom=${paddingValues.calculateBottomPadding()}), avgCharsPerLine=$avgCharsPerLine, maxLinesPerPage=$maxLinesPerPage")
+        Log.i(
+            "ContentActivity",
+            "PageCharsLayoutParameters: fontSizeSp=$fontSizeSp, topBar=${topAppBarHeightDp}dp, status=${statusBarHeightDp}dp, nav=${navigationBarHeightDp}dp, contentPadding(top=${paddingValues.calculateTopPadding()}, bottom=${paddingValues.calculateBottomPadding()}), avgCharsPerLine=$avgCharsPerLine, maxLinesPerPage=$maxLinesPerPage"
+        )
     }
 }
 //
@@ -1104,6 +1109,7 @@ private fun JumpToPageDialog(
 @Composable
 fun DraggablePlayButton(
     modifier: Modifier = Modifier,
+    isFullScreen: Boolean = false,
     isSpeaking: Boolean = false,
     onClick: () -> Unit = {},
     onStop: () -> Unit = {},
@@ -1126,55 +1132,56 @@ fun DraggablePlayButton(
             }
         }
     }
+    if (!isFullScreen) {
+        Box(modifier = modifier) {
+            FloatingActionButton(
+                onClick = {
+                    if (isSpeaking) {
+                        onStop()
+                    } else {
+                        onClick()
+                    }
+                },
+                containerColor = if (isSpeaking) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                contentColor = Color.White,
+                modifier = Modifier
+                    .offset { offset }
+                    .pointerInput(onShake, isSpeaking, onClick, onStop) {
+                        detectDragGestures(
+                            onDragStart = {},
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                offset += IntOffset(
+                                    dragAmount.x.toInt(),
+                                    dragAmount.y.toInt()
+                                )
+                                // 只有在正在播放时才更新拖动记录和检测摇晃，避免在非播放状态下频繁计算
+                                if (isSpeaking) {
+                                    val currentTime = System.currentTimeMillis()
+                                    updateDragQueue(dragQueue, offset, currentTime)
 
-    Box(modifier = modifier) {
-        FloatingActionButton(
-            onClick = {
-                if (isSpeaking) {
-                    onStop()
-                } else {
-                    onClick()
-                }
-            },
-            containerColor = if (isSpeaking) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-            contentColor = Color.White,
-            modifier = Modifier
-                .offset { offset }
-                .pointerInput(onShake, isSpeaking, onClick, onStop) {
-                    detectDragGestures(
-                        onDragStart = {},
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            offset += IntOffset(
-                                dragAmount.x.toInt(),
-                                dragAmount.y.toInt()
-                            )
-                            // 只有在正在播放时才更新拖动记录和检测摇晃，避免在非播放状态下频繁计算
-                            if (isSpeaking) {
-                                val currentTime = System.currentTimeMillis()
-                                updateDragQueue(dragQueue, offset, currentTime)
+                                    if (currentTime - lastShakeCheckTime > 50) { // 每 50ms 检查一次
+                                        shakeCheckResult = checkIfShake(dragQueue)
+                                        lastShakeCheckTime = currentTime
+                                    }
 
-                                if (currentTime - lastShakeCheckTime > 50) { // 每 50ms 检查一次
-                                    shakeCheckResult = checkIfShake(dragQueue)
-                                    lastShakeCheckTime = currentTime
-                                }
-
-                                if (!isShaking && shakeCheckResult) {
-                                    isShaking = true
-                                    onShake()
+                                    if (!isShaking && shakeCheckResult) {
+                                        isShaking = true
+                                        onShake()
+                                    }
                                 }
                             }
-                        }
-                    )
-                }
-                .size(56.dp),
-            shape = CircleShape
-        ) {
-            Icon(
-                imageVector = if (isSpeaking) Icons.Default.Stop else Icons.Default.PlayArrow,
-                contentDescription = if (isSpeaking) "暂停" else "播放",
-                modifier = Modifier.size(24.dp)
-            )
+                        )
+                    }
+                    .size(56.dp),
+                shape = CircleShape
+            ) {
+                Icon(
+                    imageVector = if (isSpeaking) Icons.Default.Stop else Icons.Default.PlayArrow,
+                    contentDescription = if (isSpeaking) "暂停" else "播放",
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }
