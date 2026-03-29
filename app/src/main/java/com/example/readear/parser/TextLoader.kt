@@ -32,8 +32,8 @@ class TextLoader(
         uri: Uri,
         avgCharsPerLine: Int,
         maxLinesPerPage: Int,
-        positionStatus: PositionStatus?,
-        positionCallBack: (PositionStatus) -> Unit,
+        positionStatus: PositionStatus? = null,
+        positionCallBack: (PositionStatus) -> Unit = {},
     ): Flow<TextChunk> = withContext(Dispatchers.IO) {
         val textExtractorFactory = TextExtractorFactory(context)
         val extractor = textExtractorFactory.getExtractor(uri)
