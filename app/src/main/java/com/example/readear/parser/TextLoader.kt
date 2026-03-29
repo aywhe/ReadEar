@@ -30,12 +30,13 @@ class TextLoader(
      */
     suspend fun extractAndPaginate(
         uri: Uri,
+        startPosition: Int,
         avgCharsPerLine: Int,
         maxLinesPerPage: Int
     ): Flow<TextChunk> = withContext(Dispatchers.IO) {
         val textExtractorFactory = TextExtractorFactory(context)
         val extractor = textExtractorFactory.getExtractor(uri)
-        val rawTextFlow = extractor.extractTextRaw(uri)
+        val rawTextFlow = extractor.extractTextRaw(uri,startPosition)
         paginateText(rawTextFlow, avgCharsPerLine, maxLinesPerPage)
     }
     
@@ -43,7 +44,7 @@ class TextLoader(
      * 将连续的文本流分割成适合显示的页面
      */
     private suspend fun paginateText(
-        textFlow: Flow<String>,
+        textFlow: Flow<TextExtractionResult>,
         avgCharsPerLine: Int,
         maxLinesPerPage: Int
     ): Flow<TextChunk> = flow {
@@ -52,6 +53,7 @@ class TextLoader(
         }
         
         textFlow.collect { text ->
+            // 原书一个position
             text.lines().forEach { line ->
                 paginator.processLine(line)
             }

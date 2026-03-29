@@ -14,7 +14,7 @@ interface TextExtractor {
      * @param uri 文件 URI
      * @return 返回原始文本的 Flow（按行或按段）
      */
-    fun extractTextRaw(uri: Uri, startPosition: Int = 0): Flow<TextExtractionResult>
+    fun extractTextRaw(uri: Uri, startPosition: Int): Flow<TextExtractionResult>
 }
 
 /**
