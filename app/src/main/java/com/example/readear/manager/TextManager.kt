@@ -10,8 +10,11 @@ import com.example.readear.data.CacheCoordinator
 import com.example.readear.data.CacheManager
 import com.example.readear.data.Page
 import com.example.readear.data.PagesCache
+import com.example.readear.parser.PositionStatus
 import com.example.readear.parser.TextChunk
 import com.example.readear.parser.TextLoader
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * 文本加载状态
@@ -240,8 +243,32 @@ class TextManager(
             var pageCount = 0
             var lastPageIndex = 0
             var totalWords = 0
-            
-            textLoader.extractAndPaginate(uri, avgCharsPerLine, maxLinesPerPage).collect { textChunk ->
+            // 从数据库中获取断点信息
+            val positionState: PositionStatus? = try {
+                cacheManager.getBreakpoint(uriString)?.let { (position, chunkIndex, remainContent) ->
+                    PositionStatus(chunkIndex, position, remainContent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "获取断点信息失败：${e.message}", e)
+                null
+            }
+            if(positionState != null) {
+                totalWords = cacheManager.getBook(uriString)?.totalWords ?: 0
+            }
+
+            textLoader.extractAndPaginate(uri, avgCharsPerLine, maxLinesPerPage,
+                positionState,{ positionStatus ->
+                    if(pageCount % 500 == 0) {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            cacheManager.saveBreakpoint(
+                                uriString,
+                                positionStatus.position,
+                                positionStatus.chunkIndex,
+                                positionStatus.remainContent
+                            )
+                        }
+                    }
+                }).collect { textChunk ->
                 try {
                     val page = Page(
                         bookId = uriString,

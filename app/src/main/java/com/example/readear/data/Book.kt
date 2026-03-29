@@ -15,5 +15,9 @@ data class Book(
     val totalWords: Int,
     val totalPages: Int,
     val lastReadTime: Long,
-    val isCompleted: Boolean = false
+    val isCompleted: Boolean = false,
+    // 断点信息
+    val breakpoint: Int = 0,
+    val breakpointPage: Int = 0,
+    val breakRemainContent: String = ""
 )

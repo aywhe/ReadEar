@@ -28,7 +28,7 @@ interface BookDao {
     
     // ==================== Pages ====================
     
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPage(page: Page)
     
     @Insert(onConflict = OnConflictStrategy.IGNORE)

@@ -176,4 +176,44 @@ class CacheManager(private val context: Context) {
         val progress = dao.getReadingProgress(bookId)
         progress?.currentPage
     }
+    
+    /**
+     * 保存书籍断点信息（异步）
+     * @param bookId 书籍 ID
+     * @param breakpoint 断点位置（字符索引）
+     * @param breakpointPage 断点所在页码
+     * @param breakRemainContent 断点剩余内容
+     */
+    suspend fun saveBreakpoint(
+        bookId: String,
+        breakpoint: Int,
+        breakpointPage: Int,
+        breakRemainContent: String
+    ) = withContext(Dispatchers.IO) {
+        val book = dao.getBook(bookId)
+        if (book != null) {
+            dao.insertBook(
+                book.copy(
+                    breakpoint = breakpoint,
+                    breakpointPage = breakpointPage,
+                    breakRemainContent = breakRemainContent,
+                    lastReadTime = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+    
+    /**
+     * 获取书籍断点信息
+     * @param bookId 书籍 ID
+     * @return 返回包含断点信息的 Book 对象，如果不存在返回 null
+     */
+    suspend fun getBreakpoint(bookId: String): Triple<Int, Int, String>? = withContext(Dispatchers.IO) {
+        val book = dao.getBook(bookId)
+        if (book != null && book.breakpoint > 0) {
+            Triple(book.breakpoint, book.breakpointPage, book.breakRemainContent)
+        } else {
+            null
+        }
+    }
 }
