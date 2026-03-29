@@ -288,11 +288,13 @@ class TextManager(
                         isCompleted = textChunk.isCompleted
                     )
 
-                    if(!booksCache.hasCache(uriString)
-                        || booksCache.getCache(uriString)?.hasPage(page.pageNumber) == false
-                    ) {
-                        cacheCoordinator.savePage(uriString, page)
+                    if(positionState != null && textChunk.index < positionState.chunkIndex) {
+                        Log.d(TAG, "跳过已提取的页面: ${textChunk.index}")
+                        return@collect
                     }
+
+                    cacheCoordinator.savePage(uriString, page)
+
 
                     lastPageIndex = textChunk.index
                     totalWords += textChunk.content.length
@@ -311,11 +313,6 @@ class TextManager(
                     Log.e(TAG, "保存页面失败：${textChunk.index}, ${e.message}", e)
                 }
             }
-            // 这样设计不好，用户应该可以继续尝试启动提取任务
-//            if(pageCount == 0){
-//                Log.w(TAG, "文本没有内容，设置内存数据为完成状态, 本次应用周期不会再尝试启动提取任务")
-//                booksCache.getCache(uriString)?.setCompleted(true)
-//            }
         } catch (e: Exception) {
             Log.e(TAG, "提取文本失败：${e.message}", e)
             onLoadingStateChanged?.invoke(uriString, TextLoadingState.ERROR)
