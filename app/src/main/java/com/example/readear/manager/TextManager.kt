@@ -263,7 +263,7 @@ class TextManager(
             textLoader.extractAndPaginate(uri, avgCharsPerLine, maxLinesPerPage,
                 positionState
             ) { positionStatus ->
-                if (pageCount % 500 == 0) {
+                if (pageCount % 200 == 0) {
                     CoroutineScope(Dispatchers.IO).launch {
                         Log.d(
                             TAG,
