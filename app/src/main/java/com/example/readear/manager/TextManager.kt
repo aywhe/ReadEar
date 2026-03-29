@@ -192,32 +192,34 @@ class TextManager(
      */
     suspend fun startLoadPages(uri: Uri, avgCharsPerLine: Int, maxLinesPerPage: Int) {
         val uriString = uri.toString()
-        
+        Log.d(TAG, "开始加载页面：$uriString")
         try {
             val memoryCache = booksCache.getCache(uriString)
             if (memoryCache?.isCompleted() == true) {
-                Log.d(TAG, "内存缓存已完整，直接返回：$uriString")
+                Log.d(TAG, "内存缓存已完整，直接返回")
                 onLoadingStateChanged?.invoke(uriString, TextLoadingState.COMPLETED)
                 return
             }
-            
+            Log.d(TAG, "内存不完整，启动后台提取任务")
             val book = try {
                 cacheManager.getBook(uriString)
             } catch (e: Exception) {
-                Log.e(TAG, "获取书籍信息失败：${e.message}", e)
+                Log.e(TAG, "获取数据库书籍信息异常：${e.message}", e)
                 null
             }
-
             if(book != null) {
-                Log.d(TAG, "数据库缓存加载到内存：$uriString")
+                Log.d(TAG, "数据库中书籍信息：$book")
+                Log.d(TAG, "将数据库加载到内存")
                 cacheCoordinator.loadAllPagesToMemory(uriString)
             }
             if (book?.isCompleted == true) {
+                Log.d(TAG, "内存已完整，直接返回")
                 onLoadingStateChanged?.invoke(uriString, TextLoadingState.COMPLETED)
             } else {
-                Log.d(TAG, "启动后台提取任务：$uriString")
+                Log.d(TAG, "数据不完整，启动后台提取文件任务：$uriString")
                 onLoadingStateChanged?.invoke(uriString, TextLoadingState.LOADING)
                 extractTextFromFileAndSaveCache(uri, avgCharsPerLine, maxLinesPerPage)
+                Log.d(TAG, "后台提取任务结束")
             }
         } catch (e: Exception) {
             Log.e(TAG, "同步加载页面失败：${e.message}", e)
@@ -291,14 +293,14 @@ class TextManager(
                     ) {
                         cacheCoordinator.savePage(uriString, page)
                     }
-                    
-                    pageCount++
+
                     lastPageIndex = textChunk.index
                     totalWords += textChunk.content.length
                     
                     if (pageCount % 300 == 0 || textChunk.isCompleted) {
                         cacheCoordinator.saveBookInfo(uriString, totalWords, lastPageIndex + 1)
                     }
+                    pageCount++
                     
                     if (textChunk.isCompleted) {
                         cacheCoordinator.markCacheAsCompleted(uriString, totalWords, lastPageIndex + 1)
@@ -309,6 +311,11 @@ class TextManager(
                     Log.e(TAG, "保存页面失败：${textChunk.index}, ${e.message}", e)
                 }
             }
+            // 这样设计不好，用户应该可以继续尝试启动提取任务
+//            if(pageCount == 0){
+//                Log.w(TAG, "文本没有内容，设置内存数据为完成状态, 本次应用周期不会再尝试启动提取任务")
+//                booksCache.getCache(uriString)?.setCompleted(true)
+//            }
         } catch (e: Exception) {
             Log.e(TAG, "提取文本失败：${e.message}", e)
             onLoadingStateChanged?.invoke(uriString, TextLoadingState.ERROR)

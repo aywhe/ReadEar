@@ -27,10 +27,10 @@ class WordExtractor(private val context: Context) : TextExtractor {
                 XWPFDocument(inputStream).use { document ->
                     // 按文档顺序获取所有 body 元素（段落和表格）
                     val bodyElements = document.bodyElements
-                    
+
                     var position = 0
                     val totalElements = bodyElements.size
-                    
+
                     for (index in startPosition until totalElements) {
                         val element = bodyElements[index]
                         val isLastElement = index == totalElements - 1
@@ -54,7 +54,7 @@ class WordExtractor(private val context: Context) : TextExtractor {
                                             }
                                         }
                                     }
-                                    
+
                                     if (rowText.isNotBlank()) {
                                         emitText += rowText + "\n" // 行之间换行
                                     }

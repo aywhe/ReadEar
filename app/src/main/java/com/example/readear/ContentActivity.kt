@@ -21,6 +21,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
@@ -264,26 +265,28 @@ fun ContentScreen(
     var showSearchWindow by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
 
-    val layoutParams by remember(context) {
-        derivedStateOf {
-            calculateLayoutParameters(context)
-        }
+    val pageLayoutParams = remember(context) {
+        PageCharsLayoutParameters(context)
     }
     // 启动初始化：同步内存数据并恢复上次阅读位置
     DisposableEffect(uri) {
         // 1. 在后台启动协程执行 startLoadPages，不阻塞当前协程
         val loadJob = lifecycleScope.launch(Dispatchers.IO) {
             try {
+                Log.i(
+                    "ContentActivity",
+                    "avgCharsPerLine: ${pageLayoutParams.avgCharsPerLine}, maxLinesPerPage: ${pageLayoutParams.maxLinesPerPage}"
+                )
                 isLoadPagesOver = false
                 textManager.startLoadPages(
                     uri,
-                    layoutParams.avgCharsPerLine,
-                    layoutParams.maxLinesPerPage
+                    pageLayoutParams.avgCharsPerLine,
+                    pageLayoutParams.maxLinesPerPage
                 )
                 Log.d("ContentActivity", "加载数据结束")
             } catch (e: Exception) {
                 errorMessage = "加载数据错误：${e.message}"
-            }finally {
+            } finally {
                 isLoadPagesOver = true
             }
         }
@@ -298,7 +301,7 @@ fun ContentScreen(
             while (true) {
                 delay(10)
                 lastReadingPage = textManager.getLastReadPageNumber(uri.toString())
-                if(lastReadingPage != null || isLoadPagesOver){
+                if (lastReadingPage != null || isLoadPagesOver) {
                     break
                 }
                 delay(10)
@@ -308,12 +311,10 @@ fun ContentScreen(
                 if (totalPages > 0) {
                     Log.d("ContentActivity", "设置上次阅读进度为 0")
                     lastReadingPage = 0
-                }
-                else{
+                } else {
                     Log.d("ContentActivity", "没有阅读进度")
                 }
-            }
-            else{
+            } else {
                 Log.d("ContentActivity", "获得上次阅读进度：${lastReadingPage}")
             }
         }
@@ -498,7 +499,7 @@ fun ContentScreen(
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
                             Icon(
-                                imageVector = Icons.Default.ArrowBack,
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "返回"
                             )
                         }
@@ -565,7 +566,7 @@ fun ContentScreen(
                         }
 
                         // 为每个页面创建独立的高亮状态
-                        val isHightLight = remember(page) {
+                        val isHeightLight = remember(page) {
                             mutableStateOf(false)
                         }
 
@@ -573,7 +574,7 @@ fun ContentScreen(
                         LaunchedEffect(page, showSearchWindow, query) {
                             // 只有满足条件时才检查高亮
                             if (!showSearchWindow || query.isNullOrEmpty() || !query.isNotBlank()) {
-                                isHightLight.value = false
+                                isHeightLight.value = false
                                 return@LaunchedEffect
                             }
 
@@ -583,7 +584,7 @@ fun ContentScreen(
 
                             // 当结果不为 null 时直接使用，为 null 时需要实时检查页面内容
                             if (currentMatch != null) {
-                                isHightLight.value = currentMatch
+                                isHeightLight.value = currentMatch
                             } else {
                                 // SearchResults 中没有记录，需要实时检查 BooksCache 中的页面内容
                                 // 从 Application 中获取 booksCache
@@ -595,7 +596,7 @@ fun ContentScreen(
                                     if (pageContent != null) {
                                         val containsText =
                                             pageContent.content.contains(query, ignoreCase = true)
-                                        isHightLight.value = containsText
+                                        isHeightLight.value = containsText
 
                                         // 同时更新 SearchResults，避免下次重复检查
                                         updateSearchResults(
@@ -606,10 +607,10 @@ fun ContentScreen(
                                             pagesCache.totalPages
                                         )
                                     } else {
-                                        isHightLight.value = false
+                                        isHeightLight.value = false
                                     }
                                 } else {
-                                    isHightLight.value = false
+                                    isHeightLight.value = false
                                 }
                             }
                         }
@@ -627,7 +628,7 @@ fun ContentScreen(
                             }.collect { matchResult ->
                                 // 只有当结果明确时才更新
                                 if (matchResult != null) {
-                                    isHightLight.value = matchResult
+                                    isHeightLight.value = matchResult
                                 }
                             }
                         }
@@ -670,8 +671,9 @@ fun ContentScreen(
                             // 显示内容（确保不为 null）
                             PageContent(
                                 chunk = displayChunk,
-                                isHightLight = isHightLight.value,
+                                isHeightLight = isHeightLight.value,
                                 query = if (showSearchWindow && query.isNotBlank()) query else "",
+                                pageCharsLayoutParameters = pageLayoutParams,
                                 onDoubleTap = {
                                     isFullScreen = !isFullScreen
                                     Log.d(
@@ -685,56 +687,54 @@ fun ContentScreen(
                             )
                         }
                     }
-
-                    if (!isFullScreen) {
-                        // 添加可拖动的播放按钮
-                        DraggablePlayButton(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(16.dp),
-                            isSpeaking = isSpeaking,
-                            onClick = {
-                                lifecycleScope.launch {
-                                    val currentPageContent =
-                                        textManager.getPage(uri.toString(), pagerState.currentPage)
-                                    if (currentPageContent != null) {
-                                        // 更新当前播放页面为当前显示的页面
-                                        currentSpeakingPage = pagerState.currentPage
-                                        onPlayText(currentPageContent.content)
-                                    } else {
-                                        Toast.makeText(
-                                            context,
-                                            "当前页面内容为空",
-                                            Toast.LENGTH_SHORT
-                                        )
-                                            .show()
-                                    }
-                                }
-                            },
-                            onStop = { onStopSpeaking() },
-                            onShake = {
-                                Log.d(
-                                    "DraggablePlayButton",
-                                    "检测到按钮晃动，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}"
-                                )
-                                if (isSpeaking && currentSpeakingPage != pagerState.currentPage) {
-                                    lifecycleScope.launch {
-                                        Log.d(
-                                            "DraggablePlayButton",
-                                            "按钮晃动后跳转到当前播放页面：${pagerState.currentPage} -> $currentSpeakingPage"
-                                        )
-                                        pagerState.scrollToPage(currentSpeakingPage)
-                                        Toast.makeText(
-                                            context,
-                                            "已跳转到当前播放页面",
-                                            Toast.LENGTH_SHORT
-                                        )
-                                            .show()
-                                    }
+                    // 添加可拖动的播放按钮
+                    DraggablePlayButton(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp),
+                        isFullScreen = isFullScreen,
+                        isSpeaking = isSpeaking,
+                        onClick = {
+                            lifecycleScope.launch {
+                                val currentPageContent =
+                                    textManager.getPage(uri.toString(), pagerState.currentPage)
+                                if (currentPageContent != null) {
+                                    // 更新当前播放页面为当前显示的页面
+                                    currentSpeakingPage = pagerState.currentPage
+                                    onPlayText(currentPageContent.content)
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "当前页面内容为空",
+                                        Toast.LENGTH_SHORT
+                                    )
+                                        .show()
                                 }
                             }
-                        )
-                    }
+                        },
+                        onStop = { onStopSpeaking() },
+                        onShake = {
+                            Log.d(
+                                "DraggablePlayButton",
+                                "检测到按钮晃动，isSpeaking: $isSpeaking, currentSpeakingPage: $currentSpeakingPage, pagerState.currentPage: ${pagerState.currentPage}"
+                            )
+                            if (isSpeaking && currentSpeakingPage != pagerState.currentPage) {
+                                lifecycleScope.launch {
+                                    Log.d(
+                                        "DraggablePlayButton",
+                                        "按钮晃动后跳转到当前播放页面：${pagerState.currentPage} -> $currentSpeakingPage"
+                                    )
+                                    pagerState.scrollToPage(currentSpeakingPage)
+                                    Toast.makeText(
+                                        context,
+                                        "已跳转到当前播放页面",
+                                        Toast.LENGTH_SHORT
+                                    )
+                                        .show()
+                                }
+                            }
+                        }
+                    )
                 }
 
                 // 正在初始化
@@ -809,18 +809,16 @@ fun ContentScreen(
 fun PageContent(
     chunk: TextChunk,
     query: String = "",
-    isHightLight: Boolean = false,
+    isHeightLight: Boolean = false,
+    pageCharsLayoutParameters: PageCharsLayoutParameters,
     onDoubleTap: () -> Unit,
     onLongPress: (String) -> Unit
 ) {
-    val defaultFontSize = 16.sp // 固定字体大小
-    val baseLineHeight = 24.sp // 固定行高
-    val scaledLineHeight = baseLineHeight * 1.5f // 1.5 倍行距
-
+    val density = LocalDensity.current
     // 获取搜索关键词（从 SearchResults 中获取当前 URI 的查询）
     // 注意：这里需要传递 query 参数才能高亮，我们稍后修改
     // 构建带高亮的文本
-    val annotatedText = if (query.isNotBlank() && isHightLight) {
+    val annotatedText = if (query.isNotBlank() && isHeightLight) {
         buildAnnotatedString {
             val content = chunk.content
             append(content)
@@ -853,7 +851,7 @@ fun PageContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(pageCharsLayoutParameters.paddingValues)
             .pointerInput(chunk) {
                 detectTapGestures(
                     onDoubleTap = { onDoubleTap() },
@@ -867,11 +865,11 @@ fun PageContent(
         Text(
             text = annotatedText,
             style = MaterialTheme.typography.bodyLarge.copy(
-                fontSize = defaultFontSize,
-                lineHeight = baseLineHeight,
+                fontSize = pageCharsLayoutParameters.fontSizeSp.sp,
+                lineHeight = pageCharsLayoutParameters.baseLineHeightSp.sp,
                 color = Color.Black
             ),
-            lineHeight = scaledLineHeight,
+            lineHeight = pageCharsLayoutParameters.scaledLineHeightSp.sp,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -899,71 +897,136 @@ data class LayoutParameters(
 )
 
 /**
- * 计算并记住页面布局参数
- * 使用屏幕尺寸和密度自动计算每行字符数和每页行数
- *
- * @param context Context
- * @param density Density
- * @return LayoutParameters 包含 avgCharsPerLine 和 maxLinesPerPage
+ * 字符集参数数据类
+ * 用于存储文本渲染和分页计算所需的字符相关参数
  */
-@Composable
-private fun rememberLayoutParameters(
-    context: Context,
-    density: androidx.compose.ui.unit.Density
-): LayoutParameters {
-    // 使用 derivedStateOf 创建响应式计算结果
-    return remember(context) {
-        calculateLayoutParameters(context)
+class PageCharsLayoutParameters(private val context: Context) {
+    // 基础字体和行高参数（使用 sp 单位）
+    var fontSizeSp: Float = 16f              // 字体大小（sp），默认 16sp
+    var baseLineHeightSp: Float = 24f        // 基础行高（sp），默认 24sp
+    var scaledLineHeightSp: Float = baseLineHeightSp * 1.5f  // 缩放后的行高（sp），默认 1.5 倍行距
+
+    // 字符排版参数（无单位系数）
+    var charAspectRatio: Float = 1.0f         // 字符宽高比（汉字接近正方形），默认 1.0
+    var charSpacingFactor: Float = 1.05f       // 字间距系数（额外间距比例），默认 1.1
+
+    // 页面布局参数（无单位整数）
+    var avgCharsPerLine: Int = 0              // 每行平均字符数
+    var maxLinesPerPage: Int = 0              // 每页最大行数
+
+    // 页面边距（默认 16dp）
+    var paddingValues: PaddingValues = PaddingValues(16.dp)
+
+    var topAppBarHeightDp = 64f     // Material 3 TopAppBar 标准高度
+    var statusBarHeightDp = 24f      // 状态栏经验值
+    var navigationBarHeightDp = 48f
+
+    /**
+     * 初始化参数
+     * 根据屏幕尺寸和密度计算文本渲染和分页所需的字符参数
+     *
+     * @param context Context
+     */
+    init {
+        val displayMetrics = context.resources.displayMetrics
+        val density = displayMetrics.density
+
+        // 获取屏幕尺寸（像素）
+        val screenHeightPx = displayMetrics.heightPixels.toFloat()
+        val screenWidthPx = displayMetrics.widthPixels.toFloat()
+
+        // 字体大小保持为 sp（无需转换）
+        fontSizeSp = 16f
+        baseLineHeightSp = 24f
+        scaledLineHeightSp = baseLineHeightSp * 1.5f
+
+        charAspectRatio = 1.0f
+        charSpacingFactor = 1.05f
+
+        // 将 sp 转换为像素用于实际计算
+        val fontSizePx = fontSizeSp * (displayMetrics.densityDpi.toFloat() / 160f)
+        val scaledLineHeightPx = scaledLineHeightSp * (displayMetrics.densityDpi.toFloat() / 160f)
+
+        val effectiveCharWidth = fontSizePx * charAspectRatio * charSpacingFactor
+
+        // 使用 paddingValues 计算内容区域的边距
+        val leftPaddingPx =
+            paddingValues.calculateLeftPadding(layoutDirection = androidx.compose.ui.unit.LayoutDirection.Ltr).value * density
+        val rightPaddingPx =
+            paddingValues.calculateRightPadding(layoutDirection = androidx.compose.ui.unit.LayoutDirection.Ltr).value * density
+        val topPaddingPx = paddingValues.calculateTopPadding().value * density
+        val bottomPaddingPx = paddingValues.calculateBottomPadding().value * density
+
+        // 计算水平可用宽度（减去左右 padding）
+        val availableWidth = screenWidthPx - leftPaddingPx - rightPaddingPx
+
+        // 计算垂直可用高度（减去 TopAppBar、状态栏、导航栏和内容 padding）
+        val topBarAndStatusBarPx = (topAppBarHeightDp + statusBarHeightDp) * density
+        val navigationBarPx = navigationBarHeightDp * density
+        val availableHeight = screenHeightPx - topBarAndStatusBarPx - topPaddingPx - bottomPaddingPx
+
+        // 1. 计算每行平均字符数（像素相除，结果无单位）
+        avgCharsPerLine = (availableWidth / effectiveCharWidth).toInt()
+
+        // 2. 计算每页最大行数（像素相除，结果无单位）
+        maxLinesPerPage = (availableHeight / scaledLineHeightPx).toInt().coerceIn(10, 35)
+
+        Log.i(
+            "ContentActivity",
+            "PageCharsLayoutParameters: fontSizeSp=$fontSizeSp, topBar=${topAppBarHeightDp}dp, status=${statusBarHeightDp}dp, nav=${navigationBarHeightDp}dp, contentPadding(top=${paddingValues.calculateTopPadding()}, bottom=${paddingValues.calculateBottomPadding()}), avgCharsPerLine=$avgCharsPerLine, maxLinesPerPage=$maxLinesPerPage"
+        )
     }
 }
-
-/**
- * 计算页面布局参数的独立函数
- * 可以在任何地方调用，无需 Compose 环境
- *
- * @param context Context
- * @return LayoutParameters 包含 avgCharsPerLine 和 maxLinesPerPage
- */
-fun calculateLayoutParameters(context: Context): LayoutParameters {
-    // 页面布局参数的默认值（基于标准字体大小和行高）
-    val defaultFontSize = 16f // sp
-    val baseLineHeight = 24f // sp
-    val lineHeightScale = 1.5f // 行距倍数
-    val charAspectRatio = 1.0f // 汉字宽高比
-    val charSpacingFactor = 1.1f // 字间距系数
-
-    val displayMetrics = context.resources.displayMetrics
-    val screenHeightPx = displayMetrics.heightPixels.toFloat()
-    val screenWidthPx = displayMetrics.widthPixels.toFloat()
-
-    // 转换为像素（使用 displayMetrics 而不是 density）
-    val fontSizePx = defaultFontSize * displayMetrics.density
-    val baseLineHeightPx = baseLineHeight * displayMetrics.density
-    val scaledLineHeightPx = baseLineHeightPx * lineHeightScale
-
-    // 计算左右 padding（16dp * 2）
-    val horizontalPaddingPx = 16f * displayMetrics.density * 2
-
-    // 计算可用区域
-    val availableWidth = screenWidthPx - horizontalPaddingPx
-
-    // 估算顶部 padding（AppBar 高度约 56dp + status bar）
-    val topPaddingPx = (56f + 24f) * displayMetrics.density
-    val bottomPaddingPx = 16f * displayMetrics.density
-    val availableHeight = screenHeightPx - topPaddingPx - bottomPaddingPx
-
-    // 1. 计算每行平均字符数
-    val avgCharWidth = fontSizePx * charAspectRatio * charSpacingFactor
-    val avgCharsPerLine = (availableWidth / avgCharWidth).toInt()
-
-    // 2. 计算每页最大行数（限制在合理范围内）
-    val maxLinesPerPage = (availableHeight / scaledLineHeightPx).toInt().coerceIn(10, 35)
-
-    return LayoutParameters(
-        avgCharsPerLine = avgCharsPerLine,
-        maxLinesPerPage = maxLinesPerPage
-    )
-}
+//
+///**
+// * 计算页面布局参数的独立函数
+// * 可以在任何地方调用，无需 Compose 环境
+// *
+// * @param context Context
+// * @return LayoutParameters 包含 avgCharsPerLine 和 maxLinesPerPage
+// */
+//fun calculateLayoutParameters(context: Context): LayoutParameters {
+//    // 页面布局参数的默认值（基于标准字体大小和行高）
+//    val defaultFontSize = 16f // sp
+//    val baseLineHeight = 24f // sp
+//    val lineHeightScale = 1.5f // 行距倍数
+//    val charAspectRatio = 1.0f // 汉字宽高比
+//    val charSpacingFactor = 1.1f // 字间距系数
+//
+//    val displayMetrics = context.resources.displayMetrics
+//    val screenHeightPx = displayMetrics.heightPixels.toFloat()
+//    val screenWidthPx = displayMetrics.widthPixels.toFloat()
+//
+//    // 转换为像素（使用 displayMetrics 而不是 density）
+//    val fontSizePx = defaultFontSize * displayMetrics.density
+//    val baseLineHeightPx = baseLineHeight * displayMetrics.density
+//    val scaledLineHeightPx = baseLineHeightPx * lineHeightScale
+//
+//    // 计算左右 padding（16dp * 2）
+//    val horizontalPaddingPx = 16f * displayMetrics.density * 2
+//
+//    // 计算可用区域
+//    val availableWidth = screenWidthPx - horizontalPaddingPx
+//
+//    // 估算顶部 padding（AppBar 高度约 56dp + status bar）
+//    val topPaddingPx = (56f + 24f) * displayMetrics.density
+//    val bottomPaddingPx = 16f * displayMetrics.density
+//    val availableHeight = screenHeightPx - topPaddingPx - bottomPaddingPx
+//
+//    // 1. 计算每行平均字符数
+//    val avgCharWidth = fontSizePx * charAspectRatio * charSpacingFactor
+//    val avgCharsPerLine = (availableWidth / avgCharWidth).toInt()
+//
+//    // 2. 计算每页最大行数（限制在合理范围内）
+//    val maxLinesPerPage = (availableHeight / scaledLineHeightPx).toInt().coerceIn(10, 35)
+//
+//    Log.i("ContentActivity", "Layout Parameters:avgCharsPerLine=$avgCharsPerLine, maxLinesPerPage=$maxLinesPerPage")
+//
+//    return LayoutParameters(
+//        avgCharsPerLine = avgCharsPerLine,
+//        maxLinesPerPage = maxLinesPerPage
+//    )
+//}
 
 @Composable
 private fun JumpToPageDialog(
@@ -1046,6 +1109,7 @@ private fun JumpToPageDialog(
 @Composable
 fun DraggablePlayButton(
     modifier: Modifier = Modifier,
+    isFullScreen: Boolean = false,
     isSpeaking: Boolean = false,
     onClick: () -> Unit = {},
     onStop: () -> Unit = {},
@@ -1057,7 +1121,7 @@ fun DraggablePlayButton(
     var isShaking by remember { mutableStateOf(false) }
     // 在 DraggablePlayButton 中添加缓存状态
     var shakeCheckResult by remember { mutableStateOf(false) }
-    var lastShakeCheckTime by remember { mutableStateOf(0L) }
+    var lastShakeCheckTime by remember { mutableLongStateOf(0L) }
     val lifecycleScope = rememberCoroutineScope()
     // 检测到摇晃后，设置 isOnShake 为 true，并在 1 秒后重置为 false，避免连续触发
     LaunchedEffect(isShaking) {
@@ -1068,55 +1132,59 @@ fun DraggablePlayButton(
             }
         }
     }
+    if (!isFullScreen) {
+        Box(modifier = modifier) {
+            FloatingActionButton(
+                onClick = {
+                    if (isSpeaking) {
+                        onStop()
+                    } else {
+                        onClick()
+                    }
+                },
+                containerColor = if (isSpeaking) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                contentColor = Color.White,
+                modifier = Modifier
+                    .offset { offset }
+                    .pointerInput(onShake, isSpeaking, onClick, onStop) {
+                        detectDragGestures(
+                            onDragStart = {},
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                offset += IntOffset(
+                                    dragAmount.x.toInt(),
+                                    dragAmount.y.toInt()
+                                )
+                                // 只有在正在播放时才更新拖动记录和检测摇晃，避免在非播放状态下频繁计算
+                                if (isSpeaking) {
+                                    val currentTime = System.currentTimeMillis()
+                                    updateDragQueue(dragQueue, offset, currentTime)
 
-    Box(modifier = modifier) {
-        FloatingActionButton(
-            onClick = {
-                if (isSpeaking) {
-                    onStop()
-                } else {
-                    onClick()
-                }
-            },
-            containerColor = if (isSpeaking) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-            contentColor = Color.White,
-            modifier = Modifier
-                .offset { offset }
-                .pointerInput(onShake, isSpeaking, onClick, onStop) {
-                    detectDragGestures(
-                        onDragStart = {},
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            offset += IntOffset(
-                                dragAmount.x.toInt(),
-                                dragAmount.y.toInt()
-                            )
-                            // 只有在正在播放时才更新拖动记录和检测摇晃，避免在非播放状态下频繁计算
-                            if (isSpeaking) {
-                                val currentTime = System.currentTimeMillis()
-                                updateDragQueue(dragQueue, offset, currentTime)
+                                    if (currentTime - lastShakeCheckTime > 50) { // 每 50ms 检查一次
+                                        shakeCheckResult = checkIfShake(dragQueue)
+                                        lastShakeCheckTime = currentTime
+                                    }
 
-                                if (currentTime - lastShakeCheckTime > 50) { // 每 50ms 检查一次
-                                    shakeCheckResult = checkIfShake(dragQueue)
-                                    lastShakeCheckTime = currentTime
+                                    if (!isShaking && shakeCheckResult) {
+                                        isShaking = true
+                                        onShake()
+                                    }
                                 }
-
-                                if (!isShaking && shakeCheckResult) {
-                                    isShaking = true
-                                    onShake()
-                                }
+                            },
+                            onDragEnd = {
+                                dragQueue.clear()
                             }
-                        }
-                    )
-                }
-                .size(56.dp),
-            shape = CircleShape
-        ) {
-            Icon(
-                imageVector = if (isSpeaking) Icons.Default.Stop else Icons.Default.PlayArrow,
-                contentDescription = if (isSpeaking) "暂停" else "播放",
-                modifier = Modifier.size(24.dp)
-            )
+                        )
+                    }
+                    .size(56.dp),
+                shape = CircleShape
+            ) {
+                Icon(
+                    imageVector = if (isSpeaking) Icons.Default.Stop else Icons.Default.PlayArrow,
+                    contentDescription = if (isSpeaking) "暂停" else "播放",
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }

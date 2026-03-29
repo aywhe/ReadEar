@@ -100,7 +100,7 @@ private class TextPaginator(
         }
     }
     private val chunkSize = avgCharsPerLine * maxLinesPerPage
-    
+
     suspend fun processLine(line: String) {
 
         val linesNeeded = calculateLinesNeeded(line)

@@ -34,7 +34,9 @@ class PdfExtractor(private val context: Context) : TextExtractor {
 
                         val text = stripper.getText(document)
 
-                        emit(TextExtractionResult(text, page == totalPages,page - 1))
+                        if(text.isNotBlank()) {
+                            emit(text)
+                        }
                     }
                 }
             }
