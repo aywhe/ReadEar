@@ -296,7 +296,7 @@ class TextManager(
                     lastPageIndex = textChunk.index
                     totalWords += textChunk.content.length
                     
-                    if (pageCount % 100 == 0 || textChunk.isCompleted) {
+                    if (pageCount % 300 == 0 || textChunk.isCompleted) {
                         cacheCoordinator.saveBookInfo(uriString, totalWords, lastPageIndex + 1)
                     }
                     

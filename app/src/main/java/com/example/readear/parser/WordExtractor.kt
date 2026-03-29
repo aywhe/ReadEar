@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import org.apache.poi.xwpf.usermodel.XWPFDocument
+import org.apache.poi.xwpf.usermodel.XWPFFooter
+import org.apache.poi.xwpf.usermodel.XWPFHeader
 import org.apache.poi.xwpf.usermodel.XWPFParagraph
 import org.apache.poi.xwpf.usermodel.XWPFTable
 
@@ -32,18 +34,10 @@ class WordExtractor(private val context: Context) : TextExtractor {
                     for (index in startPosition until totalElements) {
                         val element = bodyElements[index]
                         val isLastElement = index == totalElements - 1
-                        
+                        var emitText = ""
                         when (element) {
                             is XWPFParagraph -> {
-                                val text = element.text
-                                if (text.isNotBlank()) {
-                                    emit(TextExtractionResult(
-                                        content = text,
-                                        isCompleted = isLastElement,
-                                        position = position
-                                    ))
-                                    position++
-                                }
+                                emitText += element.text
                             }
                             is XWPFTable -> {
                                 // 提取表格中的文本，按行遍历
@@ -62,16 +56,22 @@ class WordExtractor(private val context: Context) : TextExtractor {
                                     }
                                     
                                     if (rowText.isNotBlank()) {
-                                        emit(TextExtractionResult(
-                                            content = rowText,
-                                            isCompleted = isLastElement && rowIndex == rows.size - 1,
-                                            position = position
-                                        ))
-                                        position++
+                                        emitText += rowText + "\n" // 行之间换行
                                     }
                                 }
                             }
+                            // 页眉页脚
+                            is XWPFFooter->{}
+                            is XWPFHeader->{}
                         }
+                        if (emitText.isNotBlank()) {
+                            emit(TextExtractionResult(
+                                content = emitText,
+                                isCompleted = isLastElement,
+                                position = position
+                            ))
+                        }
+                        position++
                     }
                     // 3. 提取页眉页脚（可选）
 //                    document.headerList.forEach { header ->
