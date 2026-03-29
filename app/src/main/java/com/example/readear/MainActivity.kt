@@ -65,6 +65,8 @@ class MainActivity : ComponentActivity() {
         var remainingTimeMinutes by mutableStateOf<Int>(0)
     }
 
+    var hasOpenedTTSSettings = false
+
     private val fileBrowserLauncher = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uriList: List<Uri>? ->
@@ -443,6 +445,15 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
     }
+
+    override fun onResume() {
+        super.onResume()
+        if(hasOpenedTTSSettings){
+            hasOpenedTTSSettings = false
+            val app = application as? ReadEarApplication
+            app?.userTextToSpeech?.reinitialize()
+        }
+    }
 }
 
 /**
@@ -705,6 +716,9 @@ fun FileListScreen(
             onOpenTTSSettings = {
                 openTTSSettings(context)
                 showSettingsDialog = false
+                if (context is MainActivity) {
+                    context.hasOpenedTTSSettings = true
+                }
             }
         )
     }
