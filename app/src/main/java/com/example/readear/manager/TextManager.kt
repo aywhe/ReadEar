@@ -237,6 +237,7 @@ class TextManager(
         
         try {
             if (!booksCache.hasCache(uriString)) {
+                Log.d(TAG, "创建缓存：$uriString")
                 booksCache.setCache(uriString, PagesCache(uriString))
             }
             
@@ -253,25 +254,30 @@ class TextManager(
                 null
             }
             if(positionState != null) {
+                Log.d(TAG, "从数据库中获取断点信息: position=${positionState.position}, chunkIndex=${positionState.chunkIndex}, remainContent=${positionState.remainContent}")
                 totalWords = cacheManager.getBook(uriString)?.let { info ->
                     info.totalWords - info.breakRemainContent.length
                 } ?: 0
             }
 
-
             textLoader.extractAndPaginate(uri, avgCharsPerLine, maxLinesPerPage,
-                positionState,{ positionStatus ->
-                    if(pageCount % 500 == 0) {
-                        CoroutineScope(Dispatchers.IO).launch {
-                            cacheManager.saveBreakpoint(
-                                uriString,
-                                positionStatus.position,
-                                positionStatus.chunkIndex,
-                                positionStatus.remainContent
-                            )
-                        }
+                positionState
+            ) { positionStatus ->
+                if (pageCount % 500 == 0) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        Log.d(
+                            TAG,
+                            "保存断点信息: position=${positionStatus.position}, chunkIndex=${positionStatus.chunkIndex}, remainContent=${positionStatus.remainContent}"
+                        )
+                        cacheManager.saveBreakpoint(
+                            uriString,
+                            positionStatus.position,
+                            positionStatus.chunkIndex,
+                            positionStatus.remainContent
+                        )
                     }
-                }).collect { textChunk ->
+                }
+            }.collect { textChunk ->
                 try {
                     val page = Page(
                         bookId = uriString,
