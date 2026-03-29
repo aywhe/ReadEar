@@ -1170,6 +1170,9 @@ fun DraggablePlayButton(
                                         onShake()
                                     }
                                 }
+                            },
+                            onDragEnd = {
+                                dragQueue.clear()
                             }
                         )
                     }
