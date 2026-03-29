@@ -96,7 +96,7 @@ private class TextPaginator(
         if (positionStatus != null) {
             index = positionStatus.chunkIndex
             currentContent = StringBuilder(positionStatus.remainContent)
-            currentLines = calculateLinesNeeded(positionStatus.remainContent)
+            currentLines = currentContent.lines().size
         }
     }
     

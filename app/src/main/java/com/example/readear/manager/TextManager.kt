@@ -253,8 +253,11 @@ class TextManager(
                 null
             }
             if(positionState != null) {
-                totalWords = cacheManager.getBook(uriString)?.totalWords ?: 0
+                totalWords = cacheManager.getBook(uriString)?.let { info ->
+                    info.totalWords - info.breakRemainContent.length
+                } ?: 0
             }
+
 
             textLoader.extractAndPaginate(uri, avgCharsPerLine, maxLinesPerPage,
                 positionState,{ positionStatus ->
