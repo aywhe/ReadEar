@@ -1517,8 +1517,8 @@ private suspend fun searchNext(
             return
         }
 
-        // 从当前页开始搜索
-        var searchPage = currentPage
+        // 2. 从当前页的下一页开始搜索
+        var searchPage = currentPage + 1
         Log.d("DraggableSearchWindow", "开始搜索下一页，起始页码：$searchPage，总页数：$totalPageCount, uri=$uri, searchText=$searchText")
 
         // 3. 如果已经是最后一页，提示用户
@@ -1628,8 +1628,8 @@ private suspend fun searchPrevious(
             return
         }
 
-        // 从当前页开始搜索
-        var searchPage = currentPage
+        // 2. 从当前页的上一页开始搜索
+        var searchPage = currentPage - 1
         Log.d("DraggableSearchWindow", "开始搜索上一页，起始页码：$searchPage，总页数：$totalPageCount, uri=$uri, searchText=$searchText")
         // 3. 如果已经在第一页，提示用户
         if (searchPage < 0) {
