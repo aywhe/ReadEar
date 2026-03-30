@@ -40,15 +40,15 @@ class CacheManager(private val context: Context) {
     
     /**
      * 获取书籍信息
-     * @param bookId 书籍 ID
+     * @param bookUri 书籍 ID
      * @return 返回书籍对象，如果不存在返回 null
      */
-    suspend fun getBook(bookId: String): Book? = withContext(Dispatchers.IO) {
-        dao.getBook(bookId)
+    suspend fun getBook(bookUri: String): Book? = withContext(Dispatchers.IO) {
+        dao.getBook(bookUri)
     }
 
-    suspend fun isCompleted(bookId: String): Boolean = withContext(Dispatchers.IO) {
-        val book = dao.getBook(bookId)
+    suspend fun isCompleted(bookUri: String): Boolean = withContext(Dispatchers.IO) {
+        val book = dao.getBook(bookUri)
         book?.isCompleted ?: false
     }
     
@@ -62,12 +62,12 @@ class CacheManager(private val context: Context) {
     
     /**
      * 删除书籍（包括所有页面和进度）
-     * @param bookId 书籍 ID
+     * @param bookUri 书籍 ID
      */
-    suspend fun deleteBook(bookId: String) = withContext(Dispatchers.IO) {
-        dao.deleteReadingProgress(bookId)
-        dao.deletePages(bookId)
-        dao.deleteBook(bookId)
+    suspend fun deleteBook(bookUri: String) = withContext(Dispatchers.IO) {
+        dao.deleteReadingProgress(bookUri)
+        dao.deletePages(bookUri)
+        dao.deleteBook(bookUri)
     }
     
     // ==================== 页面操作 ====================
@@ -78,79 +78,79 @@ class CacheManager(private val context: Context) {
      * 在后台线程中执行数据库插入操作，避免阻塞主线程。
      * 使用 Room DAO 将页面对象持久化存储。
      * 
-     * @param bookId 书籍 ID，用于标识所属的书籍
+     * @param bookUri 书籍 ID，用于标识所属的书籍
      * @param page 页面对象，包含页面内容和元数据
      */
-    suspend fun savePage(bookId: String, page: Page) = withContext(Dispatchers.IO) {
+    suspend fun savePage(bookUri: String, page: Page) = withContext(Dispatchers.IO) {
         dao.insertPage(page)
     }
     
     /**
      * 获取指定页面
-     * @param bookId 书籍 ID
+     * @param bookUri 书籍 ID
      * @param pageNumber 页码
      * @return 返回页面对象，如果不存在返回 null
      */
-    suspend fun getPage(bookId: String, pageNumber: Int): Page? = withContext(Dispatchers.IO) {
-        dao.getPage(bookId, pageNumber)
+    suspend fun getPage(bookUri: String, pageNumber: Int): Page? = withContext(Dispatchers.IO) {
+        dao.getPage(bookUri, pageNumber)
     }
 
-    suspend fun hasPage(bookId: String, pageNumber: Int): Boolean = withContext(Dispatchers.IO) {
-        val page = dao.getPage(bookId, pageNumber)
+    suspend fun hasPage(bookUri: String, pageNumber: Int): Boolean = withContext(Dispatchers.IO) {
+        val page = dao.getPage(bookUri, pageNumber)
         page != null
     }
     
     /**
      * 获取页面范围（用于预加载）
-     * @param bookId 书籍 ID
+     * @param bookUri 书籍 ID
      * @param startPage 起始页
      * @param endPage 结束页
      * @return 返回页面列表
      */
-    suspend fun getPagesRange(bookId: String, startPage: Int, endPage: Int): List<Page> = withContext(Dispatchers.IO) {
-        dao.getPagesRange(bookId, startPage, endPage)
+    suspend fun getPagesRange(bookUri: String, startPage: Int, endPage: Int): List<Page> = withContext(Dispatchers.IO) {
+        dao.getPagesRange(bookUri, startPage, endPage)
     }
     
     /**
      * 获取所有页面
-     * @param bookId 书籍 ID
+     * @param bookUri 书籍 ID
      * @return 返回所有页面列表
      */
-    suspend fun getAllPages(bookId: String): List<Page> = withContext(Dispatchers.IO) {
-        dao.getAllPages(bookId)
+    suspend fun getAllPages(bookUri: String): List<Page> = withContext(Dispatchers.IO) {
+        dao.getAllPages(bookUri)
     }
     
     /**
      * 检查是否有页面缓存
-     * @param bookId 书籍 ID
+     * @param bookUri 书籍 ID
      * @return 如果有缓存返回 true
      */
-    suspend fun hasPagesCache(bookId: String): Boolean = withContext(Dispatchers.IO) {
-        dao.hasAnyPages(bookId)
+    suspend fun hasPagesCache(bookUri: String): Boolean = withContext(Dispatchers.IO) {
+        dao.hasAnyPages(bookUri)
     }
     
     /**
      * 获取总页数
-     * @param bookId 书籍 ID
+     * @param bookUri 书籍 ID
      * @return 返回总页数
      */
-    suspend fun getTotalPagesCount(bookId: String): Int = withContext(Dispatchers.IO) {
-        dao.getTotalPagesCount(bookId)
+    suspend fun getTotalPagesCount(bookUri: String): Int = withContext(Dispatchers.IO) {
+        dao.getTotalPagesCount(bookUri)
     }
-    suspend fun getMaxPageIndex(bookId: String): Int = withContext(Dispatchers.IO) {
-        dao.getMaxPageIndex(bookId)
+    suspend fun getMaxPageIndex(bookUri: String): Int = withContext(Dispatchers.IO) {
+        dao.getMaxPageIndex(bookUri)
     }
     
     // ==================== 阅读进度操作 ====================
     
     /**
      * 保存阅读进度（异步）
-     * @param bookId 书籍 ID
+     * @param bookUri 书籍 ID
      * @param currentPage 当前页码
      */
-    suspend fun saveReadingProgress(bookId: String, currentPage: Int) = withContext(Dispatchers.IO) {
+    suspend fun saveReadingProgress(bookUri: String, currentPage: Int) = withContext(Dispatchers.IO) {
         val progress = ReadingProgress(
-            bookId = bookId,
+            bookUri = bookUri,
             currentPage = currentPage,
             timestamp = System.currentTimeMillis()
         )
@@ -158,7 +158,7 @@ class CacheManager(private val context: Context) {
         
         // 同时更新书籍的最后阅读时间
         try {
-            val book = dao.getBook(bookId)
+            val book = dao.getBook(bookUri)
             if (book != null) {
                 dao.insertBook(book.copy(lastReadTime = System.currentTimeMillis()))
             }
@@ -169,28 +169,28 @@ class CacheManager(private val context: Context) {
     
     /**
      * 加载阅读进度
-     * @param bookId 书籍 ID
+     * @param bookUri 书籍 ID
      * @return 返回当前页码，如果未加载返回 null
      */
-    suspend fun loadReadingProgress(bookId: String): Int? = withContext(Dispatchers.IO) {
-        val progress = dao.getReadingProgress(bookId)
+    suspend fun loadReadingProgress(bookUri: String): Int? = withContext(Dispatchers.IO) {
+        val progress = dao.getReadingProgress(bookUri)
         progress?.currentPage
     }
     
     /**
      * 保存书籍断点信息（异步）
-     * @param bookId 书籍 ID
+     * @param bookUri 书籍 ID
      * @param breakpoint 断点位置（字符索引）
      * @param breakpointPage 断点所在页码
      * @param breakRemainContent 断点剩余内容
      */
     suspend fun saveBreakpoint(
-        bookId: String,
+        bookUri: String,
         breakpoint: Int,
         breakpointPage: Int,
         breakRemainContent: String
     ) = withContext(Dispatchers.IO) {
-        val book = dao.getBook(bookId)
+        val book = dao.getBook(bookUri)
         if (book != null) {
             dao.insertBook(
                 book.copy(
@@ -205,11 +205,11 @@ class CacheManager(private val context: Context) {
     
     /**
      * 获取书籍断点信息
-     * @param bookId 书籍 ID
+     * @param bookUri 书籍 ID
      * @return 返回包含断点信息的 Book 对象，如果不存在返回 null
      */
-    suspend fun getBreakpoint(bookId: String): Triple<Int, Int, String>? = withContext(Dispatchers.IO) {
-        val book = dao.getBook(bookId)
+    suspend fun getBreakpoint(bookUri: String): Triple<Int, Int, String>? = withContext(Dispatchers.IO) {
+        val book = dao.getBook(bookUri)
         if (book != null && book.breakpoint > 0) {
             Triple(book.breakpoint, book.breakpointPage, book.breakRemainContent)
         } else {

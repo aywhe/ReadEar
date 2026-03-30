@@ -9,11 +9,11 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "books")
 data class Book(
     @PrimaryKey
-    val bookId: String,
+    val bookUri: String,
     val title: String,
     val filePath: String,
-    val totalWords: Int,
-    val totalPages: Int,
+    val totalWords: Int = 0,
+    val totalPages: Int = 0,
     val lastReadTime: Long,
     val isCompleted: Boolean = false,
     // 断点信息

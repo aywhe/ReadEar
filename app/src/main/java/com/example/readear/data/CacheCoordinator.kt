@@ -1,6 +1,5 @@
 package com.example.readear.data
 
-import android.content.Context
 import android.util.Log
 import com.example.readear.parser.TextChunk
 import kotlinx.coroutines.Dispatchers
@@ -262,7 +261,7 @@ class CacheCoordinator(
                 } else {
                     cacheManager.saveBook(
                         Book(
-                            bookId = uri,
+                            bookUri = uri,
                             title = uri.substringAfterLast("/"),
                             filePath = uri,
                             totalWords = totalWords,

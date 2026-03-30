@@ -9,12 +9,12 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "pages",
-    indices = [Index(value = ["bookId", "pageNumber"], unique = true)]
+    indices = [Index(value = ["bookUri", "pageNumber"], unique = true)]
 )
 data class Page(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val bookId: String,
+    val bookUri: String,
     val pageNumber: Int,
     val content: String,
     val isCompleted: Boolean = false

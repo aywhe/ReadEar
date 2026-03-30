@@ -9,7 +9,7 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "reading_progress")
 data class ReadingProgress(
     @PrimaryKey
-    val bookId: String,
+    val bookUri: String,
     val currentPage: Int,
     val timestamp: Long
 )
