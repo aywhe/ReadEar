@@ -97,8 +97,8 @@ private class TextPaginator(
             index = positionStatus.chunkIndex
             currentContent = StringBuilder(positionStatus.remainContent)
 
-            currentContent.lines().forEach { line ->
-                if (line.isNotEmpty()) {
+            if (currentContent.isNotEmpty()) {
+                currentContent.lines().forEach { line ->
                     currentLines += calculateLinesNeeded(line)
                 }
             }
