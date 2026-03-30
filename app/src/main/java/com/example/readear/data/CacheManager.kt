@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 文本缓存管理器（基于 Room Database）
@@ -28,6 +29,39 @@ class CacheManager(private val context: Context) {
         database.bookDao()
     }
     
+    // bookUri -> bookId 映射缓存（线程安全，对外透明）
+    private val bookIdCache = ConcurrentHashMap<String, Int>()
+
+    /**
+     * 获取或缓存 bookId（内部使用，对外透明）
+     * @param bookUri 书籍 URI
+     * @return 返回 bookId，如果不存在返回 null
+     */
+    private suspend fun getOrCacheBookId(bookUri: String): Int? = withContext(Dispatchers.IO) {
+        // 优先从缓存获取
+        bookIdCache[bookUri]?.let { cachedId ->
+            return@withContext cachedId
+        }
+
+        // 缓存未命中，查询数据库
+        val book = dao.getBook(bookUri)
+        val bookId = book?.id
+
+        // 存入缓存
+        if (bookId != null) {
+            bookIdCache[bookUri] = bookId
+        }
+
+        bookId
+    }
+
+    /**
+     * 清除 bookId 缓存（删除书籍时调用）
+     */
+    private fun clearBookIdCache(bookUri: String) {
+        bookIdCache.remove(bookUri)
+    }
+
     // ==================== 书籍操作 ====================
     
     /**
@@ -40,7 +74,7 @@ class CacheManager(private val context: Context) {
     
     /**
      * 获取书籍信息
-     * @param bookUri 书籍 ID
+     * @param bookUri 书籍 URI
      * @return 返回书籍对象，如果不存在返回 null
      */
     suspend fun getBook(bookUri: String): Book? = withContext(Dispatchers.IO) {
@@ -65,6 +99,7 @@ class CacheManager(private val context: Context) {
      * @param bookUri 书籍 ID
      */
     suspend fun deleteBook(bookUri: String) = withContext(Dispatchers.IO) {
+        clearBookIdCache(bookUri)
         dao.deleteReadingProgress(bookUri)
         dao.deletePages(bookUri)
         dao.deleteBook(bookUri)
@@ -82,6 +117,8 @@ class CacheManager(private val context: Context) {
      * @param page 页面对象，包含页面内容和元数据
      */
     suspend fun savePage(bookUri: String, page: Page) = withContext(Dispatchers.IO) {
+        val bookId = getOrCacheBookId(bookUri) ?: return@withContext
+        val page = page.copy(bookId = bookId)
         dao.insertPage(page)
     }
     

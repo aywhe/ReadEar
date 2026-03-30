@@ -19,10 +19,7 @@ interface BookDao {
     
     @Query("SELECT * FROM books ORDER BY lastReadTime DESC")
     suspend fun getAllBooks(): List<Book>
-    
-    @Query("SELECT * FROM books ORDER BY lastReadTime DESC")
-    fun getAllBooksFlow(): Flow<List<Book>>
-    
+
     @Query("DELETE FROM books WHERE bookUri = :bookUri")
     suspend fun deleteBook(bookUri: String)
     
@@ -30,38 +27,81 @@ interface BookDao {
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPage(page: Page)
-    
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertPages(pages: List<Page>)
-    
-    @Query("SELECT * FROM pages WHERE bookUri = :bookUri AND pageNumber = :page")
+
+    @Query(
+        """
+        SELECT p.* FROM pages p
+        INNER JOIN books b ON p.bookId = b.id
+        WHERE b.bookUri = :bookUri AND p.pageNumber = :page
+    """
+    )
     suspend fun getPage(bookUri: String, page: Int): Page?
     
-    @Query("SELECT * FROM pages WHERE bookUri = :bookUri AND pageNumber IN (:pages)")
+    @Query(
+        """
+        SELECT p.* FROM pages p
+        INNER JOIN books b ON p.bookId = b.id
+        WHERE b.bookUri = :bookUri AND p.pageNumber IN (:pages)
+    """
+    )
     suspend fun getPages(bookUri: String, pages: List<Int>): List<Page>
     
     @Query(
         """
-        SELECT * FROM pages 
-        WHERE bookUri = :bookUri 
-        AND pageNumber BETWEEN :startPage AND :endPage
-        ORDER BY pageNumber
+        SELECT p.* FROM pages p
+        INNER JOIN books b ON p.bookId = b.id
+        WHERE b.bookUri = :bookUri 
+        AND p.pageNumber BETWEEN :startPage AND :endPage
+        ORDER BY p.pageNumber
     """
     )
     suspend fun getPagesRange(bookUri: String, startPage: Int, endPage: Int): List<Page>
     
-    @Query("SELECT * FROM pages WHERE bookUri = :bookUri")
+    @Query(
+        """
+        SELECT p.* FROM pages p
+        INNER JOIN books b ON p.bookId = b.id
+        WHERE b.bookUri = :bookUri
+    """
+    )
     suspend fun getAllPages(bookUri: String): List<Page>
     
-    @Query("SELECT COUNT(*) FROM pages WHERE bookUri = :bookUri")
+    @Query(
+        """
+        SELECT COUNT(*) FROM pages p
+        INNER JOIN books b ON p.bookId = b.id
+        WHERE b.bookUri = :bookUri
+    """
+    )
     suspend fun getTotalPagesCount(bookUri: String): Int
-    @Query("SELECT MAX(pageNumber) FROM pages WHERE bookUri = :bookUri")
+    
+    @Query(
+        """
+        SELECT MAX(p.pageNumber) FROM pages p
+        INNER JOIN books b ON p.bookId = b.id
+        WHERE b.bookUri = :bookUri
+    """
+    )
     suspend fun getMaxPageIndex(bookUri: String): Int
     
-    @Query("DELETE FROM pages WHERE bookUri = :bookUri")
+    @Query(
+        """
+        DELETE FROM pages WHERE bookId IN (
+            SELECT id FROM books WHERE bookUri = :bookUri
+        )
+    """
+    )
     suspend fun deletePages(bookUri: String)
 
-    @Query("SELECT EXISTS(SELECT 1 FROM pages WHERE bookUri = :bookUri)")
+    @Query(
+        """
+        SELECT EXISTS(
+            SELECT 1 FROM pages p
+            INNER JOIN books b ON p.bookId = b.id
+            WHERE b.bookUri = :bookUri
+        )
+    """
+    )
     fun hasAnyPages(bookUri: String): Boolean
     
     // ==================== Reading Progress ====================

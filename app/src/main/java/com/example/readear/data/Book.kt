@@ -8,7 +8,8 @@ import androidx.room.PrimaryKey
  */
 @Entity(tableName = "books")
 data class Book(
-    @PrimaryKey
+    @PrimaryKey(autoGenerate = true)
+    val id: Int = 0,
     val bookUri: String,
     val title: String,
     val filePath: String,

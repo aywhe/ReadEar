@@ -282,7 +282,6 @@ class TextManager(
             }.collect { textChunk ->
                 try {
                     val page = Page(
-                        bookUri = uriString,
                         pageNumber = textChunk.index,
                         content = textChunk.content,
                         isCompleted = textChunk.isCompleted
