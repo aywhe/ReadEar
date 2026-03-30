@@ -96,7 +96,12 @@ private class TextPaginator(
         if (positionStatus != null) {
             index = positionStatus.chunkIndex
             currentContent = StringBuilder(positionStatus.remainContent)
-            currentLines = currentContent.lines().size
+
+            currentContent.lines().forEach { line ->
+                if (line.isNotEmpty()) {
+                    currentLines += calculateLinesNeeded(line)
+                }
+            }
         }
     }
     private val chunkSize = avgCharsPerLine * maxLinesPerPage
