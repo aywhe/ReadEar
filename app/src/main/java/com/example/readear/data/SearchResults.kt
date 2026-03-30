@@ -14,9 +14,9 @@ object SearchResults {
 
     /**
      * 搜索结果缓存结构：
-     * URI -> (搜索词 -> List<Boolean>)
+     * URI -> (搜索词 -> MutableList<Boolean>)
      * 
-     * List<Boolean> 说明：
+     * MutableList<Boolean> 说明：
      * - 索引 = 页码
      * - true = 该页包含搜索词
      * - false = 该页不包含搜索词
@@ -24,14 +24,14 @@ object SearchResults {
      * 例如：URI="file1", query="hello", [true, false, true] 
      * 表示第 0、2 页包含 "hello"
      */
-    private val searchCacheMap = ConcurrentHashMap<String, ConcurrentHashMap<String, List<Boolean?>>>()
+    private val searchCacheMap = ConcurrentHashMap<String, ConcurrentHashMap<String, MutableList<Boolean?>>>()
 
     /**
      * 获取某个文件的所有搜索词缓存
      * @param uri 文件 URI
      * @return 返回 Map<搜索词，Boolean 列表>，如果不存在返回 null
      */
-    fun getAllSearchResults(uri: String): Map<String, List<Boolean?>>? {
+    fun getAllSearchResults(uri: String): Map<String, MutableList<Boolean?>>? {
         return searchCacheMap[uri]
     }
 
@@ -41,7 +41,7 @@ object SearchResults {
      * @param query 搜索关键词
      * @return 返回 Boolean 列表（索引=页码，true=匹配），如果不存在返回 null
      */
-    fun getSearchResult(uri: String, query: String): List<Boolean?>? {
+    fun getSearchResult(uri: String, query: String): MutableList<Boolean?>? {
         return searchCacheMap[uri]?.get(query)
     }
 
@@ -70,7 +70,7 @@ object SearchResults {
      * @param query 搜索关键词
      * @param matchedPages Boolean 列表（索引=页码，true=匹配）
      */
-    fun setSearchResult(uri: String, query: String, matchedPages: List<Boolean?>) {
+    fun setSearchResult(uri: String, query: String, matchedPages: MutableList<Boolean?>) {
         val fileCache = searchCacheMap.getOrPut(uri) { ConcurrentHashMap() }
         fileCache[query] = matchedPages
     }
@@ -81,7 +81,7 @@ object SearchResults {
      * @param query 搜索关键词
      * @param cache 布尔列表
      */
-    fun updateSearchResult(uri: String, query: String, cache: List<Boolean?>) {
+    fun updateSearchResult(uri: String, query: String, cache: MutableList<Boolean?>) {
         setSearchResult(uri, query, cache)
     }
 

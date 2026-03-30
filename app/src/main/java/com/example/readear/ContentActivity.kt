@@ -1488,7 +1488,6 @@ fun DraggableSearchWindow(
         }
     }
 }
-
 /**
  * 搜索下一页包含指定文本的页面
  * @param uri 文件 URI
@@ -1506,35 +1505,34 @@ private suspend fun searchNext(
 ) {
     try {
         if (pagesCache == null) {
-            Log.w("DraggableSearchWindow", "未找到页面缓存：$uri")
+            Log.w("DraggableSearchWindow", "未找到页面缓存：uri=$uri, searchText=$searchText")
             onPageFound(-1, true)
             return
         }
 
         val totalPageCount = pagesCache.totalPages
         if (totalPageCount == 0) {
-            Log.w("DraggableSearchWindow", "页面总数为 0")
+            Log.w("DraggableSearchWindow", "页面总数为 0, 无法搜索")
             onPageFound(-1, true)
             return
         }
 
-        // 2. 从下一页开始搜索（不包含当前页）
-        var searchPage = currentPage + 1
-        Log.d("DraggableSearchWindow", "开始搜索下一页，起始页码：$searchPage，总页数：$totalPageCount")
+        // 从当前页开始搜索
+        var searchPage = currentPage
+        Log.d("DraggableSearchWindow", "开始搜索下一页，起始页码：$searchPage，总页数：$totalPageCount, uri=$uri, searchText=$searchText")
 
         // 3. 如果已经是最后一页，提示用户
         if (searchPage >= totalPageCount) {
-            Log.d("DraggableSearchWindow", "⚠ 已经是最后一页，无法继续向后搜索")
+            Log.d("DraggableSearchWindow", "⚠ 已经是最后一页，无法继续向后搜索, uri=$uri, searchText=$searchText")
             onPageFound(-1, true)
             return
         }
-
-        // 4. 循环搜索每一页
+        // 4. 循环搜索每一页（向后搜索）
         while (searchPage < totalPageCount) {
             // 5. 检查 SearchResults 中是否有该页的搜索结果
+            // 需要放在 while 循环内，每次都获取最新的 SearchResults，因为可能在搜索过程中更新了结果
             val searchResult =
                 com.example.readear.data.SearchResults.getSearchResult(uri, searchText)
-
             val hasMatchInCache = searchResult?.getOrNull(searchPage)
 
             when {
@@ -1542,7 +1540,7 @@ private suspend fun searchNext(
                 hasMatchInCache != null -> {
                     if (hasMatchInCache) {
                         // 找到匹配页面
-                        Log.d("DraggableSearchWindow", "✓ SearchResults 中找到匹配页面：$searchPage")
+                        Log.d("DraggableSearchWindow", "✓ SearchResults 中找到匹配页面：$searchPage, uri=$uri, searchText=$searchText")
                         onPageFound(searchPage, true)
                         return
                     } else {
@@ -1554,10 +1552,6 @@ private suspend fun searchNext(
 
                 // 7. 如果 SearchResults 中为 null，需要从 BooksCache 中搜索
                 else -> {
-                    Log.d(
-                        "DraggableSearchWindow",
-                        "SearchResults 中未找到结果，开始从 BooksCache 中搜索"
-                    )
                     val pageContent = pagesCache.getPage(searchPage)
                     if (pageContent != null) {
                         // 在页面内容中搜索文本
@@ -1577,7 +1571,7 @@ private suspend fun searchNext(
                             // 找到匹配页面
                             Log.d(
                                 "DraggableSearchWindow",
-                                "✓ BooksCache 中找到匹配页面：$searchPage"
+                                "✓ BooksCache Content 中找到匹配页面：$searchPage, uri=$uri, searchText=$searchText"
                             )
                             onPageFound(searchPage, true)
                             return
@@ -1596,7 +1590,7 @@ private suspend fun searchNext(
         }
 
         // 8. 搜索完所有页面都没有找到
-        Log.d("DraggableSearchWindow", "⚠ 已搜索到最后一页，未找到匹配内容")
+        Log.d("DraggableSearchWindow", "⚠ 已搜索到最后一页，未找到匹配内容, uri=$uri, searchText=$searchText")
         onPageFound(-1, true)
 
     } catch (e: Exception) {
@@ -1622,34 +1616,33 @@ private suspend fun searchPrevious(
 ) {
     try {
         if (pagesCache == null) {
-            Log.w("DraggableSearchWindow", "未找到页面缓存：$uri")
+            Log.w("DraggableSearchWindow", "未找到页面缓存：uri=$uri, searchText=$searchText")
             onPageFound(-1, true)
             return
         }
 
         val totalPageCount = pagesCache.totalPages
         if (totalPageCount == 0) {
-            Log.w("DraggableSearchWindow", "页面总数为 0")
+            Log.w("DraggableSearchWindow", "页面总数为 0, 无法搜索")
             onPageFound(-1, true)
             return
         }
 
-        // 2. 从当前页的前一页开始搜索
-        var searchPage = currentPage - 1
-        Log.d("DraggableSearchWindow", "开始搜索上一页，起始页码：$searchPage，总页数：$totalPageCount")
+        // 从当前页开始搜索
+        var searchPage = currentPage
+        Log.d("DraggableSearchWindow", "开始搜索上一页，起始页码：$searchPage，总页数：$totalPageCount, uri=$uri, searchText=$searchText")
         // 3. 如果已经在第一页，提示用户
         if (searchPage < 0) {
-            Log.d("DraggableSearchWindow", "⚠ 已经是第一页，无法继续向上搜索")
+            Log.d("DraggableSearchWindow", "⚠ 已经是第一页，无法继续向上搜索, uri=$uri, searchText=$searchText")
             onPageFound(-1, true)
             return
         }
-
         // 4. 循环搜索每一页（向前搜索）
         while (searchPage >= 0) {
             // 5. 检查 SearchResults 中是否有该页的搜索结果
+            // 需要放在 while 循环内，每次都获取最新的 SearchResults，因为可能在搜索过程中更新了结果
             val searchResult =
                 com.example.readear.data.SearchResults.getSearchResult(uri, searchText)
-
             val hasMatchInCache = searchResult?.getOrNull(searchPage)
 
             when {
@@ -1657,7 +1650,7 @@ private suspend fun searchPrevious(
                 hasMatchInCache != null -> {
                     if (hasMatchInCache) {
                         // 找到匹配页面
-                        Log.d("DraggableSearchWindow", "✓ SearchResults 中找到匹配页面：$searchPage")
+                        Log.d("DraggableSearchWindow", "✓ SearchResults 中找到匹配页面：$searchPage, uri=$uri, searchText=$searchText")
                         onPageFound(searchPage, true)
                         return
                     } else {
@@ -1688,13 +1681,13 @@ private suspend fun searchPrevious(
                             // 找到匹配页面
                             Log.d(
                                 "DraggableSearchWindow",
-                                "✓ BooksCache 中找到匹配页面：$searchPage"
+                                "✓ BooksCache content 中找到匹配页面：$searchPage, uri=$uri, searchText=$searchText"
                             )
                             onPageFound(searchPage, true)
                             return
                         } else {
                             // 该页不匹配，继续搜索上一页
-                            Log.d("DraggableSearchWindow", "✗ BooksCache 中页面 $searchPage 不匹配")
+                            //Log.d("DraggableSearchWindow", "✗ BooksCache 中页面 $searchPage 不匹配")
                             searchPage--
                         }
                     } else {
@@ -1707,7 +1700,7 @@ private suspend fun searchPrevious(
         }
 
         // 8. 搜索完所有页面都没有找到
-        Log.d("DraggableSearchWindow", "⚠ 已搜索到第一页，未找到匹配内容")
+        Log.d("DraggableSearchWindow", "⚠ 已搜索到第一页，未找到匹配内容, uri=$uri, searchText=$searchText")
         onPageFound(-1, true)
 
     } catch (e: Exception) {
@@ -1724,7 +1717,7 @@ private suspend fun searchPrevious(
  * @param contains 是否包含搜索文本
  * @param totalPageCount 总页数
  */
-private fun updateSearchResults(
+private suspend fun updateSearchResults(
     uri: String,
     searchText: String,
     pageNumber: Int,
@@ -1734,25 +1727,41 @@ private fun updateSearchResults(
     // 获取现有的搜索结果
     val existingResults = com.example.readear.data.SearchResults.getSearchResult(uri, searchText)
 
-    // 创建或更新布尔列表
-    val updatedResults = if (existingResults == null) {
-        // 创建新的列表，初始化为 null
-        List(totalPageCount) { null }
-    } else {
-        // 复制现有列表
-        existingResults.toMutableList()
-    }.toMutableList()
-
-    // 确保列表足够长
-    while (updatedResults.size < totalPageCount) {
-        updatedResults.add(null)
+    if(existingResults == null){
+        Log.d("DraggableSearchWindow", "⚠ SearchResults 中不存在 uri=$uri, searchText=$searchText 的结果，创建新的结果列表")
+        com.example.readear.data.SearchResults.setSearchResult(
+            uri,
+            searchText,
+            MutableList(totalPageCount) { null }
+        )
+    }
+    else{
+        if(existingResults.size < totalPageCount){
+            Log.d("DraggableSearchWindow", "⚠ SearchResults (uri=$uri, searchText=$searchText) 列表长度 ${existingResults.size} 小于总页数 $totalPageCount，增加长度")
+            // 增加数组长度
+            val updatedResults = existingResults.toMutableList()
+            // 确保列表足够长
+            while (updatedResults.size < totalPageCount) {
+                updatedResults.add(null)
+            }
+            com.example.readear.data.SearchResults.setSearchResult(
+                uri,
+                searchText,
+                updatedResults
+            )
+        }
     }
 
+    val searchResultFlags = com.example.readear.data.SearchResults.getSearchResult(uri, searchText)
+    if(searchResultFlags == null){
+        Log.e("DraggableSearchWindow", "⚠ 无法更新 SearchResults：未找到结果列表, uri=$uri, searchText=$searchText")
+        return
+    }
+
+
+
     // 更新当前页的结果
-    updatedResults[pageNumber] = contains
+    searchResultFlags[pageNumber] = contains
 
-    // 保存回 SearchResults
-    com.example.readear.data.SearchResults.setSearchResult(uri, searchText, updatedResults)
-
-    Log.d("DraggableSearchWindow", "更新 SearchResults: 页面 $pageNumber = $contains")
+    //Log.d("DraggableSearchWindow", "更新 SearchResults: 页面 $pageNumber = $contains")
 }
