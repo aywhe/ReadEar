@@ -267,16 +267,20 @@ class TextManager(
             ) { positionStatus ->
                 if (pageCount % 200 == 0) {
                     CoroutineScope(Dispatchers.IO).launch {
-                        cacheManager.saveBreakpoint(
-                            uriString,
-                            positionStatus.position,
-                            positionStatus.chunkIndex,
-                            positionStatus.remainContent
-                        )
-                        Log.d(
-                            TAG,
-                            "保存断点信息: position=${positionStatus.position}, chunkIndex=${positionStatus.chunkIndex}, remainContent=${positionStatus.remainContent}"
-                        )
+                        try {
+                            cacheManager.saveBreakpoint(
+                                uriString,
+                                positionStatus.position,
+                                positionStatus.chunkIndex,
+                                positionStatus.remainContent
+                            )
+                            Log.d(
+                                TAG,
+                                "保存断点信息: position=${positionStatus.position}, chunkIndex=${positionStatus.chunkIndex}, remainContent=${positionStatus.remainContent}"
+                            )
+                        } catch (e: Exception) {
+                            Log.e(TAG, "保存断点信息失败：${e.message}", e)
+                        }
                     }
                 }
             }.collect { textChunk ->
