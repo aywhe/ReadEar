@@ -790,6 +790,7 @@ fun FileListItem(
     var totalPages: Int by remember { mutableStateOf(0) }
     val app = LocalContext.current.applicationContext as ReadEarApplication
 
+
     // 在 LaunchedEffect 中异步加载数据
     LaunchedEffect(file.fileUri) {
         scope.launch {
@@ -797,24 +798,20 @@ fun FileListItem(
             totalPages = cacheManager.getTotalPagesCount(file.fileUri)
         }
     }
-    // 任务 2: 监听 booksCache 变化并实时更新（优先级更高）
-    LaunchedEffect(file.fileUri) {
-        snapshotFlow {
-            app.booksCache.getCache(file.fileUri)
-        }.collect { pagesCache ->
-            if (pagesCache != null) {
-                // 只有当缓存中有有效数据时才更新
-                val cachedPageNumber = pagesCache.getLastReadingPageNumber()
-                val cachedTotalPages = pagesCache.totalPages
-
-                // 优先使用缓存数据（更实时）
-                if (cachedPageNumber != null && cachedPageNumber >= 0) {
-                    lastReadingPageNumber = cachedPageNumber
-                }
-                if (cachedTotalPages > 0) {
-                    totalPages = cachedTotalPages
+    DisposableEffect(Unit) {
+        // 定时获取booksCache中的lastReadingPageNumber
+        val job = scope.launch {
+            while (true) {
+                delay(5000)
+                val pagesCache = app.booksCache.getCache(file.fileUri)
+                if(pagesCache != null) {
+                    lastReadingPageNumber = pagesCache.getLastReadingPageNumber()
+                    totalPages = pagesCache.totalPages
                 }
             }
+        }
+        onDispose {
+            job.cancel()
         }
     }
 
