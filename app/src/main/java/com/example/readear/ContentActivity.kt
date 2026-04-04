@@ -330,6 +330,7 @@ fun ContentScreen(
             // 持续检查，直到书籍加载完成
             while (true) {
                 delay(50)
+                // 注意这里的顺序，pageCount 可能会在 isBookCompleted 之前更新，所以先获取完成状态再获取页数
                 val isCompleted = textManager.isBookCompleted(uri.toString())
                 val pagesCount = textManager.getPagesCount(uri.toString())
                 if (pagesCount != null && pagesCount > 0) {
