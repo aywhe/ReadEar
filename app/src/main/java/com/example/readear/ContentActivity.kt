@@ -329,19 +329,18 @@ fun ContentScreen(
         val pageCountJob = lifecycleScope.launch {
             // 持续检查，直到书籍加载完成
             while (true) {
-                delay(10)
-
+                delay(50)
+                val isCompleted = textManager.isBookCompleted(uri.toString())
                 val pagesCount = textManager.getPagesCount(uri.toString())
                 if (pagesCount != null && pagesCount > 0) {
                     totalPages = pagesCount
                 }
 
                 // 完成后退出
-                if (textManager.isBookCompleted(uri.toString())) {
+                if (isCompleted) {
                     Log.d("ContentActivity", "书籍页数获取完成，总页数：$totalPages")
                     break
                 }
-                delay(10)
             }
         }
 
