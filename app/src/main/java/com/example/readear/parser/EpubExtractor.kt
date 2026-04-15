@@ -26,7 +26,7 @@ class EpubExtractor(private val context: Context) : TextExtractor {
                 // 获取所有 XHTML/HTML 资源（按阅读顺序）
                 val resources = book.contents.filter { resource ->
                     val mimeType = resource.mediaType?.defaultExtension ?: ""
-                    mimeType == "xhtml" || mimeType == "html" || mimeType == "htm"
+                    mimeType == ".xhtml" || mimeType == ".html" || mimeType == ".htm"
                 }
 
                 val totalResources = resources.size
@@ -40,9 +40,29 @@ class EpubExtractor(private val context: Context) : TextExtractor {
                         // 将资源内容转换为字符串
                         val htmlContent = String(resource.data, Charsets.UTF_8)
                         
-                        // 使用 Jsoup 清理 HTML 标签，提取纯文本
-                        val text = Jsoup.parse(htmlContent).text()
-                        
+                        // 使用 Jsoup 解析 HTML，提取每个 <p> 标签的文本并根据 class 添加换行
+                        val document = Jsoup.parse(htmlContent)
+                        val paragraphs = document.select("p")
+                        val text = paragraphs.joinToString("\n") { p ->
+                            val text = p.text()
+                            
+                            val className = p.className().lowercase()
+                            val prefixNewlines = when {
+                                className.contains("h1") || className.contains("title-1") -> "\n\n"
+                                className.contains("h2") || className.contains("title-2") -> "\n"
+                                className.contains("h3") || className.contains("title-3") -> "\n"
+                                else -> ""
+                            }
+                            val suffixNewlines = when {
+                                className.contains("h1") || className.contains("title-1") -> "\n"
+                                className.contains("h2") || className.contains("title-2") -> "\n"
+                                className.contains("h3") || className.contains("title-3") -> "\n"
+                                else -> ""
+                            }
+                            
+                            "$prefixNewlines$text$suffixNewlines"
+                        }
+
                         if (text.isNotBlank()) {
                             emit(
                                 TextExtractionResult(
