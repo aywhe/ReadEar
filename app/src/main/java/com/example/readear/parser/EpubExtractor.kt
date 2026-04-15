@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import nl.siegmann.epublib.domain.MediaType
 import nl.siegmann.epublib.epub.EpubReader
 import org.jsoup.Jsoup
 
@@ -26,11 +25,10 @@ class EpubExtractor(private val context: Context) : TextExtractor {
                 
                 // 获取所有 XHTML/HTML 资源（按阅读顺序）
                 val resources = book.contents.filter { resource ->
-                    resource.mediaType == MediaType.XHTML || 
-                    resource.mediaType == MediaType.HTML
+                    val mimeType = resource.mediaType?.defaultExtension ?: ""
+                    mimeType == "xhtml" || mimeType == "html" || mimeType == "htm"
                 }
-                
-                var position = 0
+
                 val totalResources = resources.size
                 
                 // 从指定位置开始遍历章节
@@ -50,7 +48,7 @@ class EpubExtractor(private val context: Context) : TextExtractor {
                                 TextExtractionResult(
                                     content = text,
                                     isCompleted = isLastResource,
-                                    position = position
+                                    position = index
                                 )
                             )
                         }
@@ -58,8 +56,6 @@ class EpubExtractor(private val context: Context) : TextExtractor {
                         // 跳过解析失败的章节
                         e.printStackTrace()
                     }
-                    
-                    position++
                 }
             }
         } catch (e: Exception) {

@@ -743,7 +743,7 @@ fun FileListScreen(
                         ReadEar - 智能听书助手 v$versionName
                         
                         主要功能：
-                        • 支持 TXT、DOCX、PDF 格式
+                        • 支持 TXT、DOCX、PDF、EPUB 格式
                         • 文字转语音朗读
                         • 定时关闭功能
                         • 自动保存阅读进度

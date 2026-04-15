@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.readear"
         minSdk = 26  // ⭐ 从 24 提升到 26
         targetSdk = 36
-        versionCode = 4  // 每次发布递增
-        versionName = "1.3.2"  // 语义化版本号
+        versionCode = 5  // 每次发布递增
+        versionName = "1.3.5"  // 语义化版本号
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -84,10 +84,14 @@ dependencies {
     // PDFBox for PDF files - 使用 Maven Central 的版本
     //implementation("org.apache.pdfbox:pdfbox:2.0.32")
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
-    // EPUB 解析
-    implementation("nl.siegmann.epublib:epublib-core:3.1")
-    //implementation("org.slf4j:slf4j-android:1.7.36")
+    // EPUB 解析（需要排除冲突的依赖）
+    implementation("nl.siegmann.epublib:epublib-core:3.1") {
+        exclude(group = "org.slf4j")
+        exclude(group = "xmlpull")
+    }
+    implementation("org.slf4j:slf4j-android:1.7.36")
     implementation("org.jsoup:jsoup:1.17.2")
+
 
     //implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
     implementation("sh.calvin.reorderable:reorderable:3.0.0")
