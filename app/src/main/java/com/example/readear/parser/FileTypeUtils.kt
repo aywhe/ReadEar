@@ -18,6 +18,7 @@ object FileTypeUtils {
                     "pdf" -> FileType.PDF
                     "txt" -> FileType.TXT
                     "doc", "docx" -> FileType.DOCX
+                    "epub" -> FileType.EPUB
                     else -> FileType.OTHER
                 }
             }

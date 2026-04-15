@@ -84,6 +84,10 @@ dependencies {
     // PDFBox for PDF files - 使用 Maven Central 的版本
     //implementation("org.apache.pdfbox:pdfbox:2.0.32")
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+    // EPUB 解析
+    implementation("nl.siegmann.epublib:epublib-core:3.1")
+    //implementation("org.slf4j:slf4j-android:1.7.36")
+    implementation("org.jsoup:jsoup:1.17.2")
 
     //implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
     implementation("sh.calvin.reorderable:reorderable:3.0.0")

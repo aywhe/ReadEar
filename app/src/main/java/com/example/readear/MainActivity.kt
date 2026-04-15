@@ -152,7 +152,8 @@ class MainActivity : ComponentActivity() {
             "text/plain",                                    // TXT 文件
             "application/msword",                            // Word (.doc)
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // Word (.docx)
-            "application/pdf"                                // PDF 文件
+            "application/pdf",                                // PDF 文件
+            "application/epub+zip"                      // PDF 文件
         )
         fileBrowserLauncher.launch(mimeTypes)
     }
@@ -278,6 +279,7 @@ class MainActivity : ComponentActivity() {
             name.endsWith(".pdf") -> FileType.PDF
             name.endsWith(".docx") -> FileType.DOCX
             name.endsWith(".txt") -> FileType.TXT
+            name.endsWith(".epub") -> FileType.EPUB
             else -> FileType.OTHER
         }
     }
@@ -517,6 +519,7 @@ enum class FileType(val iconResId: Int) {
     PDF(R.drawable.ic_pdf),
     DOCX(R.drawable.ic_word),
     TXT(R.drawable.ic_txt),
+    EPUB(R.drawable.ic_epub),
     OTHER(R.drawable.ic_other)
 }
 
@@ -999,6 +1002,12 @@ fun FileListScreenPreview() {
                     FileType.TXT,
                     "content://com.android.providers.media.documents/document/text%3A11111",
                     1024 * 10
+                ),
+                FileItem(
+                    "电子书.epub",
+                    FileType.EPUB,
+                    "content://com.android.providers.media.documents/document/epub%3A22222",
+                    1024 * 2048
                 )
             )
         )

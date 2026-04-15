@@ -20,6 +20,7 @@ class TextExtractorFactory(private val context: Context) {
             FileType.TXT -> TxtExtractor(context)
             FileType.PDF -> PdfExtractor(context)
             FileType.DOCX -> WordExtractor(context)  // 新增
+            FileType.EPUB -> EpubExtractor(context)
             else -> throw IllegalArgumentException("Unsupported file type: $fileType")
         }
     }
