@@ -969,7 +969,7 @@ class PageCharsLayoutParameters(private val context: Context) {
         avgCharsPerLine = (availableWidth / effectiveCharWidth).toInt()
 
         // 2. 计算每页最大行数（像素相除，结果无单位）
-        maxLinesPerPage = (availableHeight / scaledLineHeightPx).toInt().coerceIn(10, 35)
+        maxLinesPerPage = (availableHeight / scaledLineHeightPx).toInt().coerceIn(10, 35) - 1
 
         Log.i(
             "ContentActivity",
