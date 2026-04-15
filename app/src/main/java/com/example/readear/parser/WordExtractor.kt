@@ -28,7 +28,6 @@ class WordExtractor(private val context: Context) : TextExtractor {
                     // 按文档顺序获取所有 body 元素（段落和表格）
                     val bodyElements = document.bodyElements
 
-                    var position = 0
                     val totalElements = bodyElements.size
 
                     for (index in startPosition until totalElements) {
@@ -68,10 +67,9 @@ class WordExtractor(private val context: Context) : TextExtractor {
                             emit(TextExtractionResult(
                                 content = emitText,
                                 isCompleted = isLastElement,
-                                position = position
+                                position = index
                             ))
                         }
-                        position++
                     }
                     // 3. 提取页眉页脚（可选）
 //                    document.headerList.forEach { header ->
