@@ -44,7 +44,7 @@ class EpubExtractor(private val context: Context) : TextExtractor {
                         val document = Jsoup.parse(htmlContent)
                         val paragraphs = document.select("p")
                         val text = paragraphs.joinToString("\n") { p ->
-                            val text = p.text()
+                            val text = p.text().prependIndent("    ")
                             
                             val className = p.className().lowercase()
                             val prefixNewlines = when {
