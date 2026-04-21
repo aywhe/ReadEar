@@ -24,10 +24,14 @@ class EpubExtractor(private val context: Context) : TextExtractor {
                 val book = EpubReader().readEpub(inputStream)
                 
                 // 获取所有 XHTML/HTML 资源（按阅读顺序）
-                val resources = book.contents.filter { resource ->
-                    val mimeType = resource.mediaType?.defaultExtension ?: ""
-                    mimeType == ".xhtml" || mimeType == ".html" || mimeType == ".htm"
-                }
+                val resources = book.spine.spineReferences
+                    .mapNotNull { it.resource }
+                    .filter { resource ->
+                        val mimeType = resource.mediaType?.name ?: ""
+                        mimeType == "application/xhtml+xml" || 
+                        mimeType == "text/html" || 
+                        mimeType == "application/html"
+                    }
 
                 val totalResources = resources.size
                 
